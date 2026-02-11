@@ -81,38 +81,46 @@ const ChatHistory = ({ onSelectConversation }) => {
             <div className="text-lg font-bold flex justify-center ">
               Messages
             </div>
+
             {conversations.map((conv) => (
-              <div
-                key={conv.roomId}
-                className="flex items-start gap-4 px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                onClick={() => onSelectConversation(conv.roomId)}
-              >
-                {/* Avatar and info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline justify-between mb-1">
-                    <h3 className="text-base font-medium text-gray-900 truncate">
-                      Chat #{conv.roomId}
-                    </h3>
-                    <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
-                      {formatRelativeTime(conv.lastMessageAt)}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 truncate">
-                    {conv.lastMessage ? (
-                      conv.lastMessage.length > 60 ? (
-                        conv.lastMessage.slice(0, 60) + "..."
-                      ) : (
-                        conv.lastMessage
-                      )
-                    ) : (
-                      <span className="text-gray-400 italic">
-                        No messages yet
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-            ))}
+  <div
+    key={conv.roomId}
+    className="flex items-start gap-4 px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors"
+    onClick={() => onSelectConversation(conv.roomId)}
+  >
+    {/* Avatar */}
+    <div className="flex-shrink-0">
+      <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#003366]">
+        <span className="text-white font-bold text-lg">Z</span>
+      </div>
+    </div>
+    {/* Info */}
+    <div className="flex-1 min-w-0">
+      <div className="flex items-baseline justify-between mb-1">
+        <h3 className="text-base font-medium text-gray-900 truncate">
+          Chat with Ai Agent
+        </h3>
+        <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
+          {formatRelativeTime(conv.lastMessageAt)}
+        </span>
+      </div>
+      <p className="text-sm text-gray-600 truncate">
+        {conv.lastMessage ? (
+          conv.lastMessage.length > 60 ? (
+            conv.lastMessage.slice(0, 60) + "..."
+          ) : (
+            conv.lastMessage
+          )
+        ) : (
+          <span className="text-gray-400 italic">
+            No messages yet
+          </span>
+        )}
+      </p>
+    </div>
+  </div>
+))}
+            
           </div>
         )}
       </div>

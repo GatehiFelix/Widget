@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import 'colors';
 import { createRAGApplication } from './index.js';
 import { syncModels } from './models/index.js';
-import { initializeSocket } from './socket/index.js';
+import { initializeSocket} from './socket/index.js';
 import tenantRoutes from './routes/tenantRoutes.js';
 import documentRoutes from './routes/documentsRoutes.js';
 import queryRoutes from './routes/queryRoutes.js';
@@ -75,6 +75,8 @@ const startServer = async () => {
     
     // Initialize Socket.io
     initializeSocket(server);
+    // Initialize Agent Socket for widget/agent integration
+    // initializeAgentSocket(server);
     
     server.listen(PORT, () => {
       console.log(`✅ Server running on port ${PORT}`.green.bold);

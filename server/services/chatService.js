@@ -4,7 +4,7 @@ import { createQueryService } from '#services/queryService.js';
 import { emitNewMessage, emitTyping } from '#socket/index.js';
 import logger from '#utils/logger.js';
 import { Op } from 'sequelize';
-import asyncHandler from 'express-async-handler';
+import axios from 'axios';
 
 const CONFIG = {
     MESSAGE_LIMIT: 50,
@@ -27,6 +27,7 @@ const getQueryService = async () => {
 /**
  * Start or resume a chat session
  */
+
 const startSession = async (clientId, sessionToken, visitorId, roomId = null) => {
     if (!clientId || !sessionToken) {
         throw new Error('clientId and sessionToken are required');
@@ -99,6 +100,23 @@ const getRecentMessages = async (roomId, limit = CONFIG.CONTEXT_MESSAGES) => {
 };
 
 /**
+ * helper webhook call function
+ */
+
+const sendMessageWebhook = async(message) => {
+    try {
+        await axios.post('http://localhost:5000/webhook/message',message,{
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        }) 
+    } catch (err) {
+        logger.error('Failed to send message webhook:', err.message);
+    }
+}
+
+/**
  * Process customer message and get AI response
  */
 const processMessage = async (clientId, roomId, content) => {
@@ -116,6 +134,9 @@ const processMessage = async (clientId, roomId, content) => {
 
     // Emit customer message immediately
     emitNewMessage(roomId, clientId, customerMessage);
+    console.log('Customer message saved and emitted:', customerMessage.id);
+    await sendMessageWebhook(customerMessage)
+    
 
     // 2. Send immediate "thinking" indicator via typing event
     emitTyping(roomId, clientId, 'ai', true);
@@ -183,6 +204,8 @@ const processMessage = async (clientId, roomId, content) => {
 
         // 7. Emit AI response
         emitNewMessage(roomId, clientId, aiMessage);
+        console.log('AI message saved and emitted:', aiMessage.id);
+        await sendMessageWebhook(aiMessage)
 
         // 8. Update context if entities were extracted
         if (ragResponse?.extractedEntities) {

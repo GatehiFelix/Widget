@@ -3,6 +3,7 @@ import asyncHandler from '../middleware/asyncHandler.js';
 import crypto from 'crypto';
 import { Client } from '../models/index.js';
 
+
 /**
  * Generate unique session token
  */
@@ -70,6 +71,8 @@ export const startSession = asyncHandler(async (req, res) => {
         visitorId, 
         roomId || null  // Pass null if no roomId
     );
+
+ 
 
     res.json({
         success: true,

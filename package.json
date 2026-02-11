@@ -64,6 +64,7 @@
     "pdf-parse": "^1.1.1",
     "sequelize": "^6.37.7",
     "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
