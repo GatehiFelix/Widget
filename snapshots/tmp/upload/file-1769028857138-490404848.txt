@@ -1,0 +1,4 @@
+Machine Learning Basics
+
+Machine learning is a subset of artificial intelligence that enables 
+computers to learn from data without being explicitly programmed.

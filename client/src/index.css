@@ -1,0 +1,125 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 210 40% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 40% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 40% 12%;
+
+    --primary: 203 87% 34%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 203 60% 94%;
+    --secondary-foreground: 203 87% 25%;
+
+    --muted: 210 20% 96%;
+    --muted-foreground: 210 15% 50%;
+
+    --accent: 203 70% 90%;
+    --accent-foreground: 203 87% 25%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 20% 90%;
+    --input: 210 20% 90%;
+    --ring: 203 87% 34%;
+
+    --radius: 0.75rem;
+
+    /* ZuriDesk Custom Tokens */
+    --zuri-gradient-start: 203 87% 34%;
+    --zuri-gradient-end: 210 80% 38%;
+    --zuri-bubble-user: 203 87% 34%;
+    --zuri-bubble-agent: 210 20% 96%;
+    --zuri-shadow: 0 4px 24px -4px hsl(210 20% 20% / 0.12);
+    --zuri-shadow-lg: 0 12px 48px -12px hsl(210 20% 20% / 0.2);
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 210 40% 8%;
+    --foreground: 210 20% 96%;
+
+    --card: 210 40% 12%;
+    --card-foreground: 210 20% 96%;
+
+    --popover: 210 40% 12%;
+    --popover-foreground: 210 20% 96%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 8%;
+
+    --secondary: 210 30% 18%;
+    --secondary-foreground: 210 20% 90%;
+
+    --muted: 210 30% 18%;
+    --muted-foreground: 210 15% 60%;
+
+    --accent: 210 30% 18%;
+    --accent-foreground: 210 20% 90%;
+
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 30% 20%;
+    --input: 210 30% 20%;
+    --ring: 217 91% 60%;
+
+    --zuri-gradient-start: 217 91% 58%;
+    --zuri-gradient-end: 230 85% 62%;
+    --zuri-bubble-user: 217 91% 58%;
+    --zuri-bubble-agent: 210 30% 18%;
+
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+@layer utilities {
+  .zuri-gradient {
+    background: linear-gradient(135deg, hsl(var(--zuri-gradient-start)) 0%, hsl(var(--zuri-gradient-end)) 100%);
+  }
+
+  .zuri-shadow {
+    box-shadow: var(--zuri-shadow);
+  }
+
+  .zuri-shadow-lg {
+    box-shadow: var(--zuri-shadow-lg);
+  }
+}
