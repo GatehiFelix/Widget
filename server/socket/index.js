@@ -154,6 +154,38 @@ export const emitNewMessage = (roomId, clientId, message) => {
 };
 
 /**
+ * Map backend message to frontend-rich structure
+ */
+export const mapMessageToFrontend = (message, clientId, user = null) => {
+    return {
+        id: message.id,
+        clientId: clientId,
+        name: user?.name || (message.sender_type === "ai" ? "AI Assistant" : "Customer"),
+        email: user?.email || "unknown@example.com",
+        avatar: user?.avatar || (message.sender_type === "ai"
+            ? "https://bit.ly/ai-avatar"
+            : "https://bit.ly/dan-abramov"),
+        topic: message.metadata?.intent || "General inquiry",
+        status: message.sender_type === "ai" ? "AI Handling" : (message.sender_type === "agent" ? "Agent" : "Customer"),
+        statusColor: message.sender_type === "ai" ? "blue.600" : (message.sender_type === "agent" ? "green.600" : "gray.600"),
+        lastMessage: message.content,
+        time: new Date(message.created_at).toLocaleTimeString(),
+        confidence: message.metadata?.confidence
+            ? `${Math.round(message.metadata.confidence * 100)}%`
+            : null,
+        takeover: message.sender_type === "ai" ? false : true,
+    };
+};
+
+/**
+ * Emit mapped message for frontend
+ */
+export const emitMappedMessage = (roomId, clientId, message, user = null) => {
+    const mapped = mapMessageToFrontend(message, clientId, user);
+    emitToRoom(roomId, clientId, 'mapped_message', mapped);
+};
+
+/**
  * Emit typing indicator
  */
 export const emitTyping = (roomId, clientId, senderType, isTyping) => {

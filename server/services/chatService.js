@@ -103,18 +103,36 @@ const getRecentMessages = async (roomId, limit = CONFIG.CONTEXT_MESSAGES) => {
  * helper webhook call function
  */
 
-const sendMessageWebhook = async(message) => {
+const sendMessageWebhook = async (message) => {
     try {
-        await axios.post('http://localhost:5000/webhook/message',message,{
+        // Fetch related room and client for enrichment
+        const room = await ChatRoom.findByPk(message.room_id);
+        const client = await Client.findByPk(message.client_id);
+
+        // Compose enriched payload
+        const enriched = {
+            id: message.id,
+            name: client?.name || "Unknown",
+            email: room?.customer_email || "N/A",
+            topic: room?.topic || "General Inquiry",
+            status: message.sender_type === "ai" ? "AI Handling" : (message.sender_type === "agent" ? "Agent Handling" : "Customer"),
+            statusColor: message.sender_type === "ai" ? "blue.600" : (message.sender_type === "agent" ? "orange.600" : "green.600"),
+            lastMessage: message.content,
+            time: message.created_at,
+            confidence: message.metadata?.confidence ? `${message.metadata.confidence}%` : null,
+            takeover: !!room?.takeover // assumes takeover is a boolean field on ChatRoom
+        };
+
+        await axios.post('http://localhost:5000/webhook/message', enriched, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             }
-        }) 
+        });
     } catch (err) {
         logger.error('Failed to send message webhook:', err.message);
     }
-}
+};
 
 /**
  * Process customer message and get AI response
@@ -172,7 +190,7 @@ const processMessage = async (clientId, roomId, content) => {
         } else if (ragResponse?.text) {
             // Handle { text: "...", usage: {...} } format
             answerText = ragResponse.text;
-        } else if (ragResponse?.answer) {
+        } else if (ragResponse?.answer) { 
             answerText = typeof ragResponse.answer === 'string' 
                 ? ragResponse.answer 
                 : ragResponse.answer?.text || String(ragResponse.answer);

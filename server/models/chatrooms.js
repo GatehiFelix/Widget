@@ -51,6 +51,16 @@ const ChatRoom = sequelize.define('ChatRoom', {
         type: DataTypes.BIGINT,
         allowNull: true
     },
+    takeover: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+    },
+    topic: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: "General Inquiry"
+    },
     created_at: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW
