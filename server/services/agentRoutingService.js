@@ -1,13 +1,3 @@
-/**
- * Agent Routing Service
- * 
- * Intelligent agent routing and queue management service
- * - Fetches agents from multiple sources (local + external)
- * - Routes customers to available agents based on load, skills, etc.
- * - Manages waiting queue when no agents available
- * - Handles priority routing for VIP customers
- */
-
 import { User } from '#models/index.js';
 import { getExternalAgents, updateExternalAgent } from '#services/externalAgentService.js';
 import { Op } from 'sequelize';
@@ -252,6 +242,7 @@ const addToQueue = (clientId, roomId, options = {}) => {
 /**
  * Remove customer from queue
  */
+
 const removeFromQueue = (roomId) => {
     const removed = waitingQueue.delete(roomId);
     if (removed) {
@@ -263,6 +254,7 @@ const removeFromQueue = (roomId) => {
 /**
  * Get customer's position in queue
  */
+
 const getQueuePosition = (roomId) => {
     const entry = waitingQueue.get(roomId);
     if (!entry) {
@@ -283,6 +275,7 @@ const getQueuePosition = (roomId) => {
 /**
  * Get queue statistics
  */
+
 const getQueueStats = () => {
     const queue = Array.from(waitingQueue.values());
     
@@ -304,6 +297,7 @@ const getQueueStats = () => {
  * Process queue and assign available agents
  * This should be called periodically or when an agent becomes available
  */
+
 const processQueue = async () => {
     if (waitingQueue.size === 0) {
         return;
@@ -364,6 +358,7 @@ const processQueue = async () => {
  * @param {Object} options - Routing options (priority, department, skills, etc.)
  * @returns {Promise<Object>} Assignment result with agent info or queue status
  */
+
 export const assignAgent = async (clientId, roomId, options = {}) => {
     try {
         logger.info(`Attempting to assign agent for Room ${roomId}, Client ${clientId}`);
@@ -432,6 +427,7 @@ export const assignAgent = async (clientId, roomId, options = {}) => {
 /**
  * Release agent when chat is closed
  */
+
 export const releaseAgent = async (agentId, source = 'local') => {
     try {
         await decrementAgentChatCount(agentId, source);
@@ -453,6 +449,7 @@ export const releaseAgent = async (agentId, source = 'local') => {
 /**
  * Calculate estimated wait time based on queue and agent availability
  */
+
 const calculateEstimatedWaitTime = () => {
     const queueSize = waitingQueue.size;
     if (queueSize === 0) {
@@ -467,6 +464,7 @@ const calculateEstimatedWaitTime = () => {
 /**
  * Get agent routing statistics
  */
+
 export const getRoutingStats = () => {
     return {
         queue: getQueueStats(),
@@ -484,6 +482,7 @@ export const getRoutingStats = () => {
 /**
  * Clear timed-out queue entries (should be called periodically)
  */
+
 export const cleanQueue = () => {
     const now = Date.now();
     let removed = 0;

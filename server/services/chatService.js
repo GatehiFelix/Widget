@@ -4,7 +4,9 @@ import { createQueryService } from '#services/queryService.js';
 import { emitNewMessage, emitTyping } from '#socket/index.js';
 import logger from '#utils/logger.js';
 import { Op } from 'sequelize';
-import axios from 'axios';
+import { sendMessageToAgentWidget } from '#socket/agentSocketClient.js';
+import { analyzeHandoverNeed } from './handoverDetectionService.js';
+import { getExternalAgents } from './externalAgentDbService.js';
 
 const CONFIG = {
     MESSAGE_LIMIT: 50,
@@ -100,10 +102,9 @@ const getRecentMessages = async (roomId, limit = CONFIG.CONTEXT_MESSAGES) => {
 };
 
 /**
- * helper webhook call function
+ * Send message to agent backend via socket
  */
-
-const sendMessageWebhook = async (message) => {
+const sendMessageToAgent = async (message) => {
     try {
         // Fetch related room and client for enrichment
         const room = await ChatRoom.findByPk(message.room_id);
@@ -122,21 +123,16 @@ const sendMessageWebhook = async (message) => {
             confidence: message.metadata?.confidence ? `${message.metadata.confidence}%` : null,
             takeover: !!room?.takeover // assumes takeover is a boolean field on ChatRoom
         };
-
-        await axios.post('http://localhost:5000/webhook/message', enriched, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
+        sendMessageToAgentWidget(enriched);
     } catch (err) {
-        logger.error('Failed to send message webhook:', err.message);
+        logger.error('Failed to send message to agent backend via socket:', err.message);
     }
 };
 
 /**
  * Process customer message and get AI response
  */
+
 const processMessage = async (clientId, roomId, content) => {
     if (!clientId || !roomId || !content) {
         throw new Error('clientId, roomId, and content are required');
@@ -153,21 +149,59 @@ const processMessage = async (clientId, roomId, content) => {
     // Emit customer message immediately
     emitNewMessage(roomId, clientId, customerMessage);
     console.log('Customer message saved and emitted:', customerMessage.id);
-    await sendMessageWebhook(customerMessage)
-    
+    await sendMessageToAgent(customerMessage)
 
-    // 2. Send immediate "thinking" indicator via typing event
+    // 2. Handover detection (before AI response)
+    // Get recent messages for conversation history
+    const conversationHistory = await getRecentMessages(roomId);
+    const handoverResult = analyzeHandoverNeed(content, conversationHistory);
+    if (handoverResult?.shouldHandover) {
+        logger.info(`Handover triggered: ${handoverResult.reason} - ${handoverResult.message}`);
+        // Fetch available external agents
+        const agents = await getExternalAgents(clientId, { status: 'online', requireAvailability: true });
+        let assignedAgent = null;
+        if (agents && agents.length > 0) {
+            // Simple round-robin: pick agent with lowest current_chat_count
+            assignedAgent = agents.sort((a, b) => (a.current_chat_count || 0) - (b.current_chat_count || 0))[0];
+            // Assign agent to room
+            await ChatRoom.update(
+                { assigned_agent_id: assignedAgent.id, takeover: true },
+                { where: { id: roomId, client_id: clientId } }
+            );
+            // Save system message
+            await saveMessage(
+                roomId,
+                clientId,
+                `You are now connected with ${assignedAgent.name}. How can they help you today?`,
+                'system'
+            );
+        } else {
+            // No external agent available
+            await saveMessage(
+                roomId,
+                clientId,
+                'All our agents are currently busy. Please wait and someone will be with you shortly.',
+                'system'
+            );
+        }
+        return {
+            handover: true,
+            reason: handoverResult.reason,
+            message: handoverResult.message,
+            customerMessage,
+            assignedAgent
+        };
+    }
+
+    // 3. Send immediate "thinking" indicator via typing event
     emitTyping(roomId, clientId, 'ai', true);
 
     // Small placeholder message (optional - comment out if not desired)
     let thinkingMessage = null;
 
     try {
-        // 3. Get session context WHILE showing typing indicator
+        // 4. Get session context WHILE showing typing indicator
         const context = await SessionContextService.getOrCreateContext(roomId, clientId);
-
-        // 4. Get recent messages for conversation history
-        const conversationHistory = await getRecentMessages(roomId);
 
         // 5. Query RAG pipeline (optimized with fast DB-first approach)
         const qs = await getQueryService();
@@ -223,7 +257,7 @@ const processMessage = async (clientId, roomId, content) => {
         // 7. Emit AI response
         emitNewMessage(roomId, clientId, aiMessage);
         console.log('AI message saved and emitted:', aiMessage.id);
-        await sendMessageWebhook(aiMessage)
+        await sendMessageToAgent(aiMessage)
 
         // 8. Update context if entities were extracted
         if (ragResponse?.extractedEntities) {
