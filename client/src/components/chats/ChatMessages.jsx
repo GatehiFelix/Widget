@@ -10,7 +10,7 @@ import {
 import { useDispatch, useSelector } from "react-redux";
 import { setSessionToken, setVisitorId } from "@slices/authSlice";
 
-const PRODUCT_ID = 2000;
+const PRODUCT_ID = 6000;
 
 const quickReplies = [
   "I need help with my account",

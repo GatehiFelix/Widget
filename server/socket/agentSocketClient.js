@@ -25,7 +25,9 @@ agentSocket.on("widget_message_received", (msg) => {
 
 // Export a function to send messages to agents
 export function sendMessageToAgentWidget(messageData) {
+    console.log("[RAG] Sending message to agent widget:", messageData);
   agentSocket.emit("widget_message", messageData);
 }
 
 export default agentSocket;
+

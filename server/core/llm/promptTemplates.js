@@ -55,6 +55,7 @@ Conversation History:
 {chat_history}
 
 Customer Message: {input}
+ABSOLUTE RULE: You are an AI assistant. Never claim to be human or a human agent under any circumstance. If asked to speak to a human, say: "Let me connect you with a human agent." — then stop.
 
 Guidelines:
 - Be conversational, not robotic
@@ -66,6 +67,8 @@ Guidelines:
 - Ask clarifying questions to understand their issue
 - Offer to escalate to a human agent if needed
 
+
+ 
 CRITICAL SECURITY RULES:
 - NEVER share information about other customers' orders, tickets, or accounts
 - ONLY use information from the Knowledge Base Context above
@@ -171,83 +174,42 @@ export const getPromptByType = (type = 'default') => {
  * @param {string} customerIdentity - Customer identity string
  * @returns {string} Formatted prompt string
  */
-export const formatRAGPrompt = (context, question, type = 'support', chatHistory = '') => {
+export const formatRAGPrompt = (context, question, type = 'support', chatHistory = '', knownCustomerData = {}) => {
+  
+  // Build the customer identity string from whatever entities we have
+  const hasIdentity = Object.keys(knownCustomerData).length > 0;
+  const customerIdentityBlock = hasIdentity
+    ? `Customer Already Provided:\n${Object.entries(knownCustomerData)
+        .map(([k, v]) => `  - ${k}: ${v}`)
+        .join('\n')}\nDO NOT ask for any of the above information again.\n`
+    : `Customer Identity: Unknown\n`;
+
   const templates = {
-    fast: `Answer concisely based on the context below. If unsure, say so.
-
-Context: ${context}
-
-Question: ${question}
-
-Answer:`,
-
-    default: `You are a helpful AI assistant. Answer based on the provided context.
-If the answer isn't in the context, say "I don't have enough information."
-Be concise and direct.
-
-Context: ${context}
-
-Question: ${question}
-
-Answer:`,
+    // ... your other templates unchanged ...
 
     support: `You are a professional support agent for ZuriDesk. Be helpful and direct. Keep responses concise (1-2 sentences unless more detail is needed).
 
+${customerIdentityBlock}
 ${context ? `Knowledge Base Context:\n${context}\n` : ''}${chatHistory ? `Conversation History:\n${chatHistory}\n` : ''}
 Current Customer Question: ${question}
 
-CRITICAL SECURITY RULES:
-1. NEVER reveal specific identifiers without verification:
-   - NO order numbers (ORD-XXXXX)
-   - NO ticket IDs (TKT-XXXXX)
-   - NO tracking numbers
-   - NO account details
-   - NO customer names from the context
-2. When customer mentions a specific issue, ask for relevant verification FIRST:
-   - For orders/refunds → ask for email address or order number
-   - For callbacks/missed calls → ask for phone number
-   - For tickets/support cases → ask for email or ticket number
-   - For account issues → ask for email address
-3. Only discuss specific details AFTER customer provides the relevant information
-4. Check Conversation History - if they already provided the needed info, proceed without asking again
-5. For general questions - answer directly without asking for details
+CRITICAL RULES:
+1. If "Customer Already Provided" section above contains an email, ticket number, or any other detail — DO NOT ask for it again. Use it directly.
+2. NEVER reveal specific identifiers (order numbers, ticket IDs, account details) without verification
+3. Only ask for information that is NOT already in "Customer Already Provided"
+4. Check Conversation History — if they already gave you info there, don't ask again either
+5. For general questions, answer directly without asking for details
 
-PROACTIVE ASSISTANCE - GATHER INFO BEFORE ESCALATING:
-Your job is to HELP, not immediately pass to an agent. Try to assist FIRST by gathering information:
-- For callback/missed call issues → Get their phone number, then offer: "I can schedule an agent to call you back. What time works best for you?"
-- For order issues → Get order number or email, check what you can find in the knowledge base
-- For account problems → Get their email, see what information you have access to
-- For technical issues → Ask clarifying questions about the problem
-- For refund requests → Get order details, explain the refund process if you have it in your knowledge base
-
-ONLY escalate to a human agent if:
-- You've gathered relevant information but still can't help
-- The issue requires access you don't have
-- The customer specifically asks to speak with someone
-
-Don't say "I'll connect you with an agent" as your first response. Try to help first.
+PROACTIVE ASSISTANCE:
+- Try to help FIRST by using what you already know from "Customer Already Provided"
+- Only ask for missing info if truly needed and not already provided
+- ONLY escalate to human agent if you've tried to help and genuinely cannot
 
 Agent:`,
-
-    detailed: `You are an AI assistant that provides accurate, detailed answers based on the given context.
-
-Instructions:
-- Use only the information from the context below
-- Cite specific parts of the context when relevant
-- If the context doesn't contain enough information, clearly state this
-- Provide a comprehensive but focused answer
-
-Context:
-${context}
-
-Question: ${question}
-
-Detailed Answer:`
   };
 
   return templates[type] || templates.support;
 };
-
 export default {
   getDefaultRAGPrompt,
   getConversationalPrompt,

@@ -63,74 +63,85 @@ export const createRAGPipeline = async (options = {}) => {
    */
   const query = async (tenantId, question, options = {}) => {
     logger.info(`Query from tenant ${tenantId}: ${question}`);
-    
     const startTime = Date.now();
 
-    // Use override collection if set, otherwise use tenantId as-is
-    // tenantId can be "tenant_6000" or "6000" - normalize it
     const overrideCollection = process.env.QDRANT_DEFAULT_COLLECTION;
     const normalizedTenant = tenantId.startsWith('tenant_') ? tenantId : `tenant_${tenantId}`;
     const tenantCollection = overrideCollection || normalizedTenant;
-    
+
     let retrievedDocs = [];
-    
+    let docsWithScores = [];
+
     try {
-      const vectorStore = await qdrantService.createVectorStore(
-        embeddingService.getEmbeddings(),
-        tenantCollection
-      );
-      
-      // Simple search without complex filtering
-      retrievedDocs = await vectorStore.similaritySearch(
-        question, 
-        options.k || kDocuments
-      );
-      
-      logger.debug(`Retrieved ${retrievedDocs.length} docs from ${tenantCollection}`);
+        const vectorStore = await qdrantService.createVectorStore(
+            embeddingService.getEmbeddings(),
+            tenantCollection
+        );
+
+        // Use similaritySearchWithScore so we can compute confidence
+        docsWithScores = await vectorStore.similaritySearchWithScore(
+            question,
+            options.k || kDocuments
+        );
+
+        retrievedDocs = docsWithScores.map(([doc]) => doc);
+        logger.debug(`Retrieved ${retrievedDocs.length} docs from ${tenantCollection}`);
     } catch (error) {
-      logger.warn(`Collection ${tenantCollection} not found: ${error.message}`);
+        logger.warn(`Collection ${tenantCollection} not found: ${error.message}`);
     }
 
-    logger.debug(`Total retrieved ${retrievedDocs.length} documents`);
+    // Compute confidence from similarity scores (scores are cosine similarity 0-1)
+    const confidence = docsWithScores.length > 0
+        ? Math.round(Math.max(...docsWithScores.map(([, score]) => score)) * 100)
+        : null;
 
-    // Format context from retrieved documents
+    logger.debug(`Confidence score: ${confidence} from ${docsWithScores.length} docs`);
+
     const context = retrievedDocs
-      .map(doc => doc.pageContent)
-      .join('\n\n---\n\n');
+        .map(doc => doc.pageContent)
+        .join('\n\n---\n\n');
 
-    // Format conversation history if provided
-    const chatHistory = options.conversationHistory 
-      ? options.conversationHistory
-          .map(msg => `${msg.sender_type === 'customer' ? 'Customer' : 'Agent'}: ${msg.content}`)
-          .join('\n')
-      : '';
+    const chatHistory = options.conversationHistory
+        ? options.conversationHistory
+            .map(msg => `${msg.sender_type === 'customer' ? 'Customer' : 'Agent'}: ${msg.content}`)
+            .join('\n')
+        : '';
 
-    // Build the prompt (default to 'support' for chat interactions)
+    // Inject collected context entities into prompt so LLM knows what's already known
+    const knownEntities = options.context && Object.keys(options.context).length > 0
+        ? `\nKnown customer details: ${JSON.stringify(options.context)}\nDo NOT ask for information already present above.\n`
+        : '';
+
     const promptType = options.promptType || 'support';
-    const prompt = formatRAGPrompt(context, question, promptType, chatHistory);
+    const basePrompt = formatRAGPrompt(context, question, promptType, chatHistory, options.context || {});
+    const prompt = knownEntities ? `${knownEntities}\n${basePrompt}` : basePrompt;
 
-    // Generate response using LLM service
     if (options.stream) {
-      // Return async generator for streaming
-      return (async function* () {
-        for await (const chunk of llmService.stream(prompt)) {
-          yield { answer: chunk, context: retrievedDocs };
-        }
-      })();
+        return (async function* () {
+            for await (const chunk of llmService.stream(prompt)) {
+                yield { answer: chunk, context: retrievedDocs };
+            }
+        })();
     }
 
-    const answer = await llmService.generate(prompt);
+    const llmResult = await llmService.generate(prompt);
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    
     logger.info(`Query completed in ${duration}s`);
-    console.log("Retrieved context chunks:", retrievedDocs.length);
-    
+
     return {
-      answer,
-      context: retrievedDocs,
-      input: question,
+        text: llmResult.text,           // clean string — chatService picks this up first
+        answer: llmResult.text,         // kept for backwards compat
+        sources: retrievedDocs.map(doc => ({
+            content: doc.pageContent,
+            metadata: doc.metadata,
+        })),
+        confidence,                     // now populated from vector scores
+        intent: options.intent || null,
+        usage: llmResult.usage,
+        context: retrievedDocs,
+        input: question,
     };
-  };
+};
 
   /**
    * Perform semantic search

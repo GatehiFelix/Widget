@@ -44,7 +44,7 @@ const ChatWidget = () => {
     // Get tokens from storage or state as needed
     const sessionToken = localStorage.getItem('chat_session');
     const visitorId = localStorage.getItem('chat_visitor_id');
-    const clientId = 1; // Replace with actual logic
+    const clientId = 2; // Replace with actual logic
 
     try {
       const result = await startSession({

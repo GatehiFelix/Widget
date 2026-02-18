@@ -15,6 +15,7 @@
 import { Sequelize } from 'sequelize';
 import logger from '../utils/logger.js';
 import axios from 'axios';
+import Client from '#models/clients.js';
 
 // Cache for external connections
 let externalConnection = null;
@@ -23,6 +24,25 @@ let lastConnectionTime = null;
 
 // Connection health check interval (5 minutes)
 const HEALTH_CHECK_INTERVAL = 5 * 60 * 1000;
+
+
+// Simple in-memory cache
+let agentCache = null;
+let cacheTimestamp = null;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+const getCachedAgents = () => {
+    if (agentCache && cacheTimestamp && (Date.now() - cacheTimestamp < CACHE_TTL)) {
+        logger.debug('Returning cached external agents');
+        return agentCache;
+    }
+    return null;
+};
+
+const setCachedAgents = (agents) => {
+    agentCache = agents;
+    cacheTimestamp = Date.now();
+};
 
 /**
  * Configuration from environment variables
@@ -104,6 +124,7 @@ const initializeConnection = async () => {
 /**
  * Check connection health and reconnect if needed
  */
+
 const ensureConnection = async () => {
     const config = getExternalDBConfig();
     
@@ -128,36 +149,61 @@ const ensureConnection = async () => {
 /**
  * Fetch agents from API endpoint
  */
-const fetchAgentsFromAPI = async (clientId, filters = {}) => {
+
+
+const fetchAgentsFromAPI = async (clientId) => {
     const config = getExternalDBConfig();
-    
+
+    const cached = getCachedAgents();
+    if (cached) {
+        return cached;
+    }
+
     if (!config.apiUrl) {
         throw new Error('External agent API URL not configured');
     }
-    
+
     try {
         const headers = {};
         if (config.apiKey) {
             headers['Authorization'] = `Bearer ${config.apiKey}`;
         }
-        
-        const response = await axios.get(config.apiUrl, {
+
+        const client = await Client.findOne({ where: { id: clientId } });
+        if (!client) {
+            logger.warn(`Client with ID ${clientId} not found in database`);
+            return [];
+        } 
+        const productId = client.product_id || 'unknown'; 
+        console.log(`Product ID: ${productId}`);
+
+        console.log(`Fetching agents from API for client ${clientId} (${client.name}) at ${config.apiUrl}`);
+        const response = await axios.get(`${config.apiUrl}/${productId}`, {
             headers,
-            params: {
-                client_id: clientId,
-                status: filters.status || 'online',
-                ...filters
-            },
             timeout: 5000
+        }).catch(error => {
+            logger.error(`Error fetching agents from API: ${error.message}`);
+            throw error;
         });
-        
-        if (!response.data || !Array.isArray(response.data)) {
-            logger.warn('External API returned invalid data format');
+        console.log('API response:', response.data);
+
+        // getAllSupport returns { data: [...] }
+        const agents = Array.isArray(response.data)
+            ? response.data
+            : Array.isArray(response.data?.data)
+                ? response.data.data
+                : [];
+
+        if (agents.length === 0) {
+            logger.warn('External API returned no agents');
             return [];
         }
-        
-        // Map API response to standard agent format
-        return response.data.map(agent => normalizeAgentData(agent, config.fieldMappings));
+
+        logger.debug(`Fetched ${agents.length} agents from CRM`);
+        const normalizedAgents = agents.map(agent => normalizeAgentData(agent, config.fieldMappings));
+        setCachedAgents(normalizedAgents);
+        return normalizedAgents;
+
     } catch (error) {
         logger.error(`Failed to fetch agents from external API: ${error.message}`);
         throw error;
@@ -167,6 +213,7 @@ const fetchAgentsFromAPI = async (clientId, filters = {}) => {
 /**
  * Fetch agents from SQL database
  */
+
 const fetchAgentsFromSQL = async (clientId, filters = {}) => {
     const connection = await ensureConnection();
     
@@ -241,15 +288,15 @@ const fetchAgentsFromSQL = async (clientId, filters = {}) => {
  */
 const normalizeAgentData = (agent, fieldMappings) => {
     return {
-        id: agent[fieldMappings.id] || agent.id,
-        name: agent[fieldMappings.name] || agent.name,
-        email: agent[fieldMappings.email] || agent.email,
-        status: agent[fieldMappings.status] || agent.status,
-        client_id: agent[fieldMappings.clientId] || agent.client_id,
-        max_concurrent_chats: agent[fieldMappings.maxChats] || agent.max_concurrent_chats || 5,
-        current_chat_count: agent[fieldMappings.currentChats] || agent.current_chat_count || 0,
-        department: agent[fieldMappings.department] || agent.department || null,
-        skills: agent[fieldMappings.skills] || agent.skills || null,
+        id: agent.id,
+        name: agent.name,
+        email: agent.email,
+        status: agent.status || 'online', // default to online
+        client_id: agent.client_id || null,
+        max_concurrent_chats: 5,          // default since CRM doesn't track this
+        current_chat_count: 0,            // default
+        department: agent.department || null,
+        skills: agent.skills || null,
         source: 'external'
     };
 };
@@ -261,7 +308,7 @@ const normalizeAgentData = (agent, fieldMappings) => {
  * @param {Object} filters - Filter criteria
  * @returns {Promise<Array>} List of available agents
  */
-export const getExternalAgents = async (clientId, filters = {}) => {
+export const getExternalAgents = async (clientId) => {
     const config = getExternalDBConfig();
     
     if (!config.enabled) {
@@ -270,7 +317,7 @@ export const getExternalAgents = async (clientId, filters = {}) => {
     
     try {
         if (config.type === 'api') {
-            return await fetchAgentsFromAPI(clientId, filters);
+            return await fetchAgentsFromAPI(clientId);
         } else {
             return await fetchAgentsFromSQL(clientId, filters);
         }
@@ -440,6 +487,8 @@ export const closeExternalConnection = async () => {
 };
 
 export default {
+    getCachedAgents,
+    setCachedAgents,
     getExternalAgents,
     updateExternalAgent,
     testExternalConnection,

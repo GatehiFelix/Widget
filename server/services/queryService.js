@@ -8,6 +8,7 @@ import logger from "#utils/logger.js";
 
 
 import { searchTickets, semanticSearch as vectorSearchUtil } from "../utils/mysqlSearch.js";
+import { existsSync } from "fs";
 
 const queryQueue = new PQueue({
   concurrency: 10,
@@ -259,6 +260,45 @@ export const createQueryService = async (options = {}) => {
   };
 
   /**
+   * Extract structured customer information from a text message
+   * @param {string} text - The text to extract entities from
+   * @param {Object} existingContext - Existing context to build upon
+   * @returns {Promise<Object>} Extracted entities as JSON object
+   */
+
+  const extractEntities = async (text, existingContext = {}) => {
+    const prompt = `You are an entity extractor for a customer support system.
+Extract any customer-identifying or issue-relevant information from this message.
+
+Already known: ${JSON.stringify(existingContext)}
+
+Message: "${text}"
+
+Rules:
+- Extract ANY structured data that could help identify the customer or their issue
+- Use intuitive field names in camelCase (e.g. email, name, phone, orderId, ticketNumber, accountId, invoiceNumber, deviceType, planName, companyName, issueDescription, etc.)
+- Only include fields actually present in the message
+- Skip fields already in "Already known" unless the value has changed
+- If nothing useful to extract, return {}
+
+Respond ONLY with a valid JSON object, no explanation, no markdown.`;
+
+    try {
+        const result = await llmService.generate(prompt);
+        const cleaned = result.text.trim().replace(/^```json\n?|\n?```$/g, '').trim();
+        
+        // Guard against LLM returning non-object
+        const parsed = JSON.parse(cleaned);
+        if (typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        
+        return parsed;
+    } catch (e) {
+        logger.warn('Entity extraction parse failed:', e.message);
+        return {};
+    }
+};
+
+  /**
    * Stream a query response
    * @param {string} tenantId - Tenant identifier
    * @param {string} question - User question
@@ -304,6 +344,9 @@ export const createQueryService = async (options = {}) => {
           },
         );
       });
+
+      logger.debug('RAG pipeline raw result keys:', Object.keys(results || {})); 
+      logger.debug('Confidence value:', results?.confidence);
 
       queryCache.set(cacheKey, results);
       return results;
@@ -358,6 +401,7 @@ export const createQueryService = async (options = {}) => {
     query,
     classifyQuery,
     hybridRetrieve,
+    extractEntities,
     streamQuery,
     semanticSearch,  
     clearCache,

@@ -10,6 +10,7 @@ import documentRoutes from './routes/documentsRoutes.js';
 import queryRoutes from './routes/queryRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
+import supportAgentRoutes from './routes/supportAgentRoutes.js';
 import logger from './utils/logger.js';
 import {cleanAllCollections} from './utils/cleanQdrantDB.js';
 
@@ -57,6 +58,7 @@ app.use('/api/query', queryRoutes);
 app.use('/api/tenants', tenantRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/agents', supportAgentRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {

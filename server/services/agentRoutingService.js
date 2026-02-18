@@ -85,8 +85,9 @@ const getAllAvailableAgents = async (clientId, filters = {}) => {
                 requireAvailability: true
             });
             agents.push(...externalAgents);
+            logger.debug(`Fetched ${externalAgents.length} external agents`);
         } catch (error) {
-            logger.error(`External agents fetch failed: ${error.message}`);
+            logger.error(`External agents fetch failed: ${error.message}`);  
         }
     }
     
