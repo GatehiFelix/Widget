@@ -221,50 +221,51 @@ const processMessage = async (clientId, roomId, content) => {
 
     if (validAgents.length > 0) {
         const assignedAgent = validAgents.sort(
-            (a, b) => (a.current_chat_count || 0) - (b.current_chat_count || 0)
+          (a, b) => (a.current_chat_count || 0) - (b.current_chat_count || 0)
         )[0];
 
         logger.info(`[TRACE] Assigning agent ${assignedAgent.name} to room ${roomId}`);
 
         let user;
         try {
-            // Use EMAIL as lookup key — CRM ids are not reliable (e.g. id:0)
-            // This creates the agent in local users table if they don't exist yet
-            // which is required because chat_rooms.assigned_agent_id is a FK to users.id
-            [user] = await User.findOrCreate({
-                where: { email: assignedAgent.email },
-                defaults: {
-                    name: assignedAgent.name || 'Agent',
-                    email: assignedAgent.email,
-                    role: 'agent',
-                    status: 'online',
-                    client_id: clientId
-                }
-            });
-            logger.info(`[TRACE] Local user ready for agent: ${user.name} (local id:${user.id})`);
+          // Use EMAIL as lookup key — CRM ids are not reliable (e.g. id:0)
+          // This creates the agent in local users table if they don't exist yet
+          // which is required because chat_rooms.assigned_agent_id is a FK to users.id
+          [user] = await User.findOrCreate({
+            where: { email: assignedAgent.email },
+            defaults: {
+              name: assignedAgent.name || 'Agent',
+              email: assignedAgent.email,
+              role: 'agent',
+              status: 'online',
+              client_id: clientId
+            }
+          });
+          logger.info(`[TRACE] Local user ready for agent: ${user.name} (local id:${user.id})`);
         } catch (err) {
-            logger.error(`[ERROR] Failed to create/find user for agent: ${err.message}`);
-            await saveMessage(roomId, clientId, "All our agents are currently busy. Please wait.", "system");
-            return { handover: true, reason: handoverResult.reason, customerMessage, assignedAgent: null };
+          logger.error(`[ERROR] Failed to create/find user for agent: ${err.message}`);
+          await saveMessage(roomId, clientId, "All our agents are currently busy. Please wait.", "system");
+          return { handover: true, reason: handoverResult.reason, customerMessage, assignedAgent: null };
         }
 
         try {
-            // Use local user.id (NOT assignedAgent.id from CRM) to satisfy FK constraint
-            await ChatRoom.update(
-                { assigned_agent_id: user.id, takeover: true },
-                { where: { id: roomId, client_id: clientId } }
-            );
+          // Use local user.id (NOT assignedAgent.id from CRM) to satisfy FK constraint
+          await ChatRoom.update(
+            { assigned_agent_id: user.id, takeover: true },
+            { where: { id: roomId, client_id: clientId } }
+          );
         } catch (err) {
-            logger.error(`[ERROR] Failed to update ChatRoom: ${err.message}`);
+          logger.error(`[ERROR] Failed to update ChatRoom: ${err.message}`);
         }
 
-            logger.info(`[TRACE] Sending agent assignment system message: You are now connected with ${user.name}. They will be reaching out to you shortly.`);
-            await saveMessage(
-              roomId, clientId,
-              `You are now connected with ${user.name}. They will be reaching out to you shortly.`,
-              "system"
-            );
-            logger.info(`[TRACE] Agent assignment system message sent for room ${roomId}, client ${clientId}`);
+        logger.info(`[TRACE] Sending agent assignment AI message: You are now connected with ${user.name}. They will be reaching out to you shortly.`);
+        const aiMessage = await saveMessage(
+          roomId, clientId,
+          `You are now connected with ${user.name}. They will be reaching out to you shortly.`,
+          "ai"
+        );
+        emitNewMessage(roomId, clientId, aiMessage)
+        logger.info(`[TRACE] Agent assignment AI message sent for room ${roomId}, client ${clientId}`);
 
         return { handover: true, reason: handoverResult.reason, message: handoverResult.message, customerMessage, assignedAgent: user };
 

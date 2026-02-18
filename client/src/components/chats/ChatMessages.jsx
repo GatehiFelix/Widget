@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { io } from "socket.io-client";
 import { motion } from "framer-motion";
 import { Send, Bot, X, ArrowLeft } from "lucide-react";
 import { SyncLoader } from "react-spinners";
@@ -44,6 +45,52 @@ const ChatMessages = ({ roomId, onBack }) => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Real-time socket connection for new messages
+  useEffect(() => {
+    if (!session || !session.roomId || !session.clientId) return;
+
+    // Use VITE_APP_SOCKET_URL from env
+    const socketUrl = import.meta.env.VITE_APP_SOCKET_URL || "http://localhost:5000";
+    const socket = io(socketUrl, {
+      transports: ["websocket"],
+      withCredentials: true,
+    });
+
+    // Join the chat room
+    socket.emit("join_room", { roomId: session.roomId, clientId: session.clientId });
+
+    // Handler for new messages
+    const handleNewMessage = (msg) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [
+          ...prev,
+          {
+            id: msg.id,
+            content: msg.content,
+            sender:
+              msg.sender_type === "customer"
+                ? "user"
+                : msg.sender_type === "ai"
+                  ? "agent"
+                  : "system",
+            timestamp: new Date(msg.created_at),
+            agentName: msg.sender_type === "ai" ? "ZuriDesk AI" : undefined,
+          },
+        ];
+      });
+    };
+
+    socket.on("new_message", handleNewMessage);
+
+    // Cleanup on unmount or session change
+    return () => {
+      socket.emit("leave_room", { roomId: session.roomId, clientId: session.clientId });
+      socket.off("new_message", handleNewMessage);
+      socket.disconnect();
+    };
+  }, [session]);
 
   // Initialize session on mount
   useEffect(() => {
