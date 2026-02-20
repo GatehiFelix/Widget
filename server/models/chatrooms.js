@@ -51,6 +51,10 @@ const ChatRoom = sequelize.define('ChatRoom', {
         type: DataTypes.BIGINT,
         allowNull: true
     },
+    assigned_agent_email: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
     takeover: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

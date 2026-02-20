@@ -102,6 +102,21 @@ export const sendMessage = asyncHandler(async (req, res) => {
 
     const result = await ChatService.processMessage(clientId, roomId, content);
 
+    // Handover case — message already emitted via socket
+    if (result.handover) {
+        return res.json({
+            success: true,
+            data: {
+                handover: true,
+                reason: result.reason,
+                assignedAgent: result.assignedAgent
+                    ? { name: result.assignedAgent.name }
+                    : null,
+            }
+        });
+    }
+
+    // Normal AI response case
     res.json({
         success: true,
         data: {

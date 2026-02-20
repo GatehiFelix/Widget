@@ -10,7 +10,7 @@ router.get('/external', async (req, res) => {
         return res.status(400).json({ error: 'client_id is required' });
     }
 
-    const agents = await getExternalAgents(Number(client_id), { status, department });
+    const agents = await getExternalAgents(Number(client_id));
     res.json({ agents });
 });
 

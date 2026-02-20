@@ -43,10 +43,6 @@ export const initializeSocket = (httpServer) => {
     io.on('connection', (socket) => {
         logger.info(`Socket connected: ${socket.id}`);
 
-        // ============================================
-        // EXISTING CHAT FUNCTIONALITY (Don't touch!)
-        // ============================================
-        
         // Join a chat room
         socket.on('join_room', ({ roomId, clientId }) => {
             const room = `room_${roomId}_${clientId}`;

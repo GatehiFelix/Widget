@@ -30,6 +30,7 @@ const ChatMessages = ({ roomId, onBack }) => {
   const [isSending, setIsSending] = useState(false);
   const [session, setSession] = useState(null);
   const [hasUserSent, setHasUserSent] = useState(false);
+  const [isAgentTyping, setIsAgentTyping] = useState(false);
   const messagesEndRef = useRef(null);
 
   const [startSession] = useStartSessionMutation();
@@ -51,14 +52,18 @@ const ChatMessages = ({ roomId, onBack }) => {
     if (!session || !session.roomId || !session.clientId) return;
 
     // Use VITE_APP_SOCKET_URL from env
-    const socketUrl = import.meta.env.VITE_APP_SOCKET_URL || "http://localhost:5000";
+    const socketUrl =
+      import.meta.env.VITE_APP_SOCKET_URL || "http://localhost:5000";
     const socket = io(socketUrl, {
       transports: ["websocket"],
       withCredentials: true,
     });
 
     // Join the chat room
-    socket.emit("join_room", { roomId: session.roomId, clientId: session.clientId });
+    socket.emit("join_room", {
+      roomId: session.roomId,
+      clientId: session.clientId,
+    });
 
     // Handler for new messages
     const handleNewMessage = (msg) => {
@@ -83,14 +88,23 @@ const ChatMessages = ({ roomId, onBack }) => {
     };
 
     socket.on("new_message", handleNewMessage);
+    socket.on("typing", (data) => {
+      if(data.sender_type === "ai") {
+        setIsAgentTyping(data.is_typing);
+      }
+    })
 
     // Cleanup on unmount or session change
     return () => {
-      socket.emit("leave_room", { roomId: session.roomId, clientId: session.clientId });
+      socket.emit("leave_room", {
+        roomId: session.roomId,
+        clientId: session.clientId,
+      });
       socket.off("new_message", handleNewMessage);
+      socket.off("typing");
       socket.disconnect();
     };
-  }, [session]);
+  }, [session?.roomId, session?.clientId, session]);
 
   // Initialize session on mount
   useEffect(() => {
@@ -105,8 +119,6 @@ const ChatMessages = ({ roomId, onBack }) => {
 
     const initSession = async () => {
       try {
-
-
         let sessionTokenToSend;
 
         if (roomId !== null) {
@@ -119,7 +131,7 @@ const ChatMessages = ({ roomId, onBack }) => {
         const result = await startSession({
           productId: PRODUCT_ID,
           sessionToken: sessionTokenToSend, // undefined for new chats, existing for resume
-          visitorId: visitorId, // Always send the same visitorId 
+          visitorId: visitorId, // Always send the same visitorId
           roomId: roomId || undefined,
         }).unwrap();
 
@@ -217,15 +229,35 @@ const ChatMessages = ({ roomId, onBack }) => {
         content: userMessage.content,
       }).unwrap();
 
-      if (result.success && result.data.message) {
-        const aiMessage = {
-          id: result.data.message.id?.toString() || Date.now().toString(),
-          content: result.data.message.content,
-          sender: "agent",
-          timestamp: new Date(result.data.message.created_at || Date.now()),
-          agentName: "ZuriDesk AI",
-        };
-        setMessages((prev) => [...prev, aiMessage]);
+      // if (result.success && result.data.message) {
+      //   const aiMessage = {
+      //     id: result.data.message.id?.toString() || Date.now().toString(),
+      //     content: result.data.message.content,
+      //     sender: "agent",
+      //     timestamp: new Date(result.data.message.created_at || Date.now()),
+      //     agentName: "ZuriDesk AI",
+      //   };
+      //   setMessages((prev) => [...prev, aiMessage]);
+      // }
+
+      if (result.success) {
+        if (result.data.handover) {
+          // wait for the backend handover message
+          return;
+        }
+
+        if (result.data.message) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: result.data.message.id?.toString() || Date.now().toString(),
+              content: result.data.message.content,
+              sender: "agent",
+              timestamp: new Date(result.data.message.created_at || Date.now()),
+              agentName: "ZuriDesk AI",
+            },
+          ]);
+        }
       }
     } catch (error) {
       console.error("Failed to send message:", error);
@@ -329,13 +361,13 @@ const ChatMessages = ({ roomId, onBack }) => {
             );
           })}
 
-        {isSending && (
-          <div className="flex justify-start">
-            <div className="bg-zuri-bubble-agent rounded-2xl rounded-bl-md px-4 py-3">
-              <SyncLoader color="#9ca3af" size={6} speedMultiplier={0.7} />
-            </div>
-          </div>
-        )}
+        {(isAgentTyping || isSending) && (
+  <div className="flex justify-start items-center">
+    <div className="bg-zuri-bubble-agent rounded-2xl rounded-bl-md px-4 py-3">
+      <SyncLoader color="#9ca3af" size={6} speedMultiplier={0.7} />
+    </div>
+  </div>
+)}
 
         <div ref={messagesEndRef} />
 

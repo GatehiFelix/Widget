@@ -1,21 +1,8 @@
-/**
- * External Agent Database Connector
- * 
- * Provides a flexible interface to connect to external databases
- * for fetching agent information. Supports multiple database types.
- * 
- * Configuration should be provided via environment variables:
- * - EXTERNAL_AGENT_DB_ENABLED=true
- * - EXTERNAL_AGENT_DB_TYPE=mysql|postgres|mssql|api
- * - EXTERNAL_AGENT_DB_URI=connection_string
- * - EXTERNAL_AGENT_API_URL=api_endpoint (for API type)
- * - EXTERNAL_AGENT_API_KEY=api_key (for API type)
- */
-
 import { Sequelize } from 'sequelize';
 import logger from '../utils/logger.js';
 import axios from 'axios';
 import Client from '#models/clients.js';
+import { fetchAgents, selectAgent} from './agentService.js';
 
 // Cache for external connections
 let externalConnection = null;
@@ -317,7 +304,7 @@ export const getExternalAgents = async (clientId) => {
     
     try {
         if (config.type === 'api') {
-            return await fetchAgentsFromAPI(clientId);
+            return await fetchAgents(clientId);
         } else {
             return await fetchAgentsFromSQL(clientId, filters);
         }
