@@ -243,3 +243,33 @@ export const closeSession = asyncHandler(async (req, res) => {
         data: result
     });
 });
+
+
+
+//-Public APi
+/**
+ * @desc get all active conversations for a client or Agent
+ * @route GET /api/chat/active-conversations/:clientId
+ * @access Public 
+ */
+ 
+const getActiveConversations = async (req, res) => {
+  const { agentId } = req.query; // optional — filter by agent
+
+  const where = { 
+    takeover: true,
+    status: "active",
+  };
+
+  if (agentId) {
+    where.external_agent_id = agentId;
+  }
+
+  const rooms = await ChatRoom.findAll({
+    where,
+    order: [["last_activity_at", "DESC"]],
+  });
+
+  res.json({ success: true, data: rooms });
+};
+

@@ -26,12 +26,10 @@ export const clearAgentCache = () => {
 
 // Normalize raw agents data from the agent backend
 const normalizeAgent = (raw) => ({
-    id: raw.id,
+    id: raw.user_id,
     name: raw.name || raw.full_name || "unknown",
     email: raw.email,
-    phone: raw.phone || raw.extension || null,
     productId: raw.product_id || raw.productId || null,
-    isAvailable: raw.is_availble || raw.isAvailable || false,
 })
 
 
@@ -86,7 +84,8 @@ export const fetchAgents = async (clientId) => {
  */
 
 export const selectAgent = (agents = []) => {
-    const valid = agents.filter((a) => a.email && a.id !== 0 && a.isAvailable);
+    const valid = agents.filter(a => a.email);
+    console.log("Valid agents after filtering:", valid);
     if (!valid.length) return null;
 
     return valid.sort(

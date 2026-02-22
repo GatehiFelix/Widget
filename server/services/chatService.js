@@ -41,6 +41,12 @@ const startSession = async (clientId, sessionToken, visitorId, roomId = null) =>
     roomId || null,
   );
 
+  //join conversation room for socket.io
+  agentClient.joinConversation(session.room.id, clientId);
+
+  agentClient.joinConversation(session.room.id, clientId);
+  emitTyping(session.room.id, clientId, "ai", false);
+
   return {
     roomId: session.room.id,
     messages: session.messages,
@@ -104,6 +110,10 @@ const sendMessageToAgent = async (message, room = null, client = null) => {
       room ? Promise.resolve(room) : ChatRoom.findByPk(message.room_id),
       client ? Promise.resolve(client) : Client.findByPk(message.client_id),
     ]);
+    console.log("Resolved room and client for agent message:", {
+      room: resolvedRoom ? { id: resolvedRoom.id, topic: resolvedRoom.topic } : null,
+      client: resolvedClient ? { id: resolvedClient.id, name: resolvedClient.name } : null,
+    });
 
     const enriched = {
       id: message.id,
@@ -135,7 +145,9 @@ const sendMessageToAgent = async (message, room = null, client = null) => {
         : null,
       takeover: !!resolvedRoom?.takeover,
     };
+    console.log("Enriched message payload for agent backend:", enriched);
 
+    agentClient.joinConversation(resolvedRoom.id, resolvedClient.id); 
     agentClient.sendMessage(enriched);
   } catch (err) {
     logger.error("Failed to send message to agent backend via socket:", err.message);
@@ -172,23 +184,32 @@ const processMessage = async (clientId, roomId, content) => {
     collectedEntities: context?.collected_entities || {},
   });
 
-  // ── Helpers ────────────────────────────────────────────────
 
   const pickAgent = async () => {
     const agents = await fetchAgents(clientId);
+    console.log("Available agents:", agents);
     return selectAgent(agents);
   };
 
   const assignAgent = async (agent) => {
-    await ChatRoom.update(
-      {
-        assigned_agent_id: agent.id,
-        assigned_agent_email: agent.email,
-        agent_source: "external",
-        takeover: true,
-      },
-      { where: { id: roomId, client_id: clientId } },
-    );
+    const updatePayload = {
+    assigned_agent_email: agent.email,
+    external_agent_id: agent.id,
+    agent_source: "external",
+    takeover: true,
+  };
+
+  if (updatePayload.agent_source === "external") {
+    updatePayload.external_agent_id = Number(agent.id);
+    updatePayload.assigned_agent_id = null; // clear local FK
+  } else {
+    updatePayload.assigned_agent_id = Number(agent.id); // local user, FK valid
+    updatePayload.external_agent_id = null;
+  }
+
+  await ChatRoom.update(updatePayload, {
+    where: { id: roomId, client_id: clientId },
+  });
 
     const updatedEntities = {
       ...context.collected_entities,
@@ -248,7 +269,7 @@ const processMessage = async (clientId, roomId, content) => {
         const msg = await saveMessage(
           roomId,
           clientId,
-          `You are currently being assisted by ${agentName}. How can they help you today?`,
+          `You are currently being assisted by ${agentName}. How can I help you today?`,
           "system",
         );
         emitNewMessage(roomId, clientId, msg);
@@ -265,6 +286,7 @@ const processMessage = async (clientId, roomId, content) => {
 
       // No agent yet — pick one
       const agent = await pickAgent();
+      console.log("Selected agent for handover:", agent);
 
       if (agent) {
         await assignAgent(agent);
@@ -560,6 +582,9 @@ const closeSession = async (roomId, clientId) => {
 
   return { closed: true };
 };
+
+
+
 
 export const ChatService = {
   startSession,

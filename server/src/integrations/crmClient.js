@@ -1,6 +1,7 @@
 // src/clients/agentBackendClient.js
 
 import { io } from "socket.io-client";
+import{ getIO } from "#socket/index.js";
 import fetch from "node-fetch";
 import logger from "#utils/logger.js";
 
@@ -12,10 +13,11 @@ import logger from "#utils/logger.js";
  */
 class AgentBackendClient {
   constructor() {
-    this.baseUrl = process.env.AGENT_BACKEND_URL || "http://localhost:5000";
+    this.baseUrl = process.env.EXTERNAL_AGENT_BASE_URL;
     this.apiKey = process.env.INTERNAL_API_KEY;
+    this.jwtSecret = process.env.JWT_SECRET;
     this.socketNamespace = "/widget";
-
+ 
     this._socket = null;
     this._isReady = false;
     this._messageHandlers = new Map();
@@ -92,6 +94,7 @@ class AgentBackendClient {
    * Send a chat message to the agent widget namespace
    */
   sendMessage(messageData) {
+    // console.log("Emitting widget_message with data:", messageData);
     this._emit("widget_message", messageData);
   }
 
@@ -170,9 +173,7 @@ class AgentBackendClient {
     return this._apiPost(`/api/internal/handovers`, payload);
   }
 
-  // ─────────────────────────────────────────────
   // PRIVATE HELPERS
-  // ─────────────────────────────────────────────
 
   _emit(event, data) {
     if (!this.isReady) {
@@ -216,9 +217,28 @@ class AgentBackendClient {
   }
 }
 
-// Inside AgentBackendClient class
-
 
 // Singleton — one client instance per process
 const agentClient = new AgentBackendClient();
 export default agentClient;
+
+
+agentClient.on("widget_message", (messageData) => {
+  try {
+    const io = getIO();
+    if (messageData.conversation_id) {
+      // Forward to all clients in the correct widget room/namespace
+      io.of("/widget")
+        .to(`widget_conv_${messageData.conversation_id}`)
+        .emit("widget_message_received", messageData);
+      console.log(`[CRMClient] Forwarded widget_message to widget_conv_${messageData.conversation_id}`);
+      if (typeof logger !== 'undefined') {
+        logger.info(`[CRMClient] Forwarded widget_message to widget_conv_${messageData.conversation_id}`);
+      }
+    }
+  } catch (err) {
+    if (typeof logger !== 'undefined') {
+      logger.error(`[CRMClient] Error forwarding widget_message: ${err.message}`);
+    }
+  }
+});

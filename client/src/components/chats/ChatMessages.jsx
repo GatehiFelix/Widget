@@ -51,54 +51,58 @@ const ChatMessages = ({ roomId, onBack }) => {
   useEffect(() => {
     if (!session || !session.roomId || !session.clientId) return;
 
-    // Use VITE_APP_SOCKET_URL from env
-    const socketUrl =
-      import.meta.env.VITE_APP_SOCKET_URL || "http://localhost:5000";
+    const socketUrl = window.location.origin;
+    
+    // Connect to default namespace — NOT /widget
     const socket = io(socketUrl, {
       transports: ["websocket"],
       withCredentials: true,
     });
 
-    // Join the chat room
-    socket.emit("join_room", {
-      roomId: session.roomId,
-      clientId: session.clientId,
+
+
+    // Join the correct room format RAG uses
+    socket.emit("join_room", { 
+      roomId: session.roomId, 
+      clientId: session.clientId 
     });
 
-    // Handler for new messages
+    // All messages come through new_message on the default namespace
     const handleNewMessage = (msg) => {
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === msg.id)) return prev;
-        return [
-          ...prev,
-          {
-            id: msg.id,
-            content: msg.content,
-            sender:
-              msg.sender_type === "customer"
-                ? "user"
-                : msg.sender_type === "ai"
-                  ? "agent"
-                  : "system",
-            timestamp: new Date(msg.created_at),
-            agentName: msg.sender_type === "ai" ? "ZuriDesk AI" : undefined,
-          },
-        ];
-      });
-    };
+  setMessages((prev) => {
+    // Remove temp message if this is the real version of it
+    const withoutTemp = msg.sender_type === "customer"
+      ? prev.filter((m) => !m.isTemp)
+      : prev;
 
+    if (withoutTemp.some((m) => m.id === msg.id)) return withoutTemp;
+
+    return [
+      ...withoutTemp,
+      {
+        id: msg.id,
+        content: msg.content,
+        sender: msg.sender_type === "customer" ? "user" 
+               : msg.sender_type === "ai" ? "agent" 
+               : "system",
+        timestamp: new Date(msg.created_at),
+        agentName: msg.sender_type !== "customer" ? "ZuriDesk AI" : undefined,
+      },
+    ];
+  });
+};
     socket.on("new_message", handleNewMessage);
+    
     socket.on("typing", (data) => {
-      if(data.sender_type === "ai") {
+      if (data.sender_type === "ai") {
         setIsAgentTyping(data.is_typing);
       }
-    })
+    });
 
-    // Cleanup on unmount or session change
     return () => {
-      socket.emit("leave_room", {
-        roomId: session.roomId,
-        clientId: session.clientId,
+      socket.emit("leave_room", { 
+        roomId: session.roomId, 
+        clientId: session.clientId 
       });
       socket.off("new_message", handleNewMessage);
       socket.off("typing");
@@ -211,10 +215,11 @@ const ChatMessages = ({ roomId, onBack }) => {
     if (!inputValue.trim() || !session || isSending) return;
 
     const userMessage = {
-      id: Date.now().toString(),
+      id: `temp_${Date.now().toString()}`,
       content: inputValue,
       sender: "user",
       timestamp: new Date(),
+      isTemp: true
     };
 
     setMessages((prev) => [...prev, userMessage]);
@@ -246,18 +251,18 @@ const ChatMessages = ({ roomId, onBack }) => {
           return;
         }
 
-        if (result.data.message) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: result.data.message.id?.toString() || Date.now().toString(),
-              content: result.data.message.content,
-              sender: "agent",
-              timestamp: new Date(result.data.message.created_at || Date.now()),
-              agentName: "ZuriDesk AI",
-            },
-          ]);
-        }
+        // if (result.data.message) {
+        //   setMessages((prev) => [
+        //     ...prev,
+        //     {
+        //       id: result.data.message.id?.toString() || Date.now().toString(),
+        //       content: result.data.message.content,
+        //       sender: "agent",
+        //       timestamp: new Date(result.data.message.created_at || Date.now()),
+        //       agentName: "ZuriDesk AI",
+        //     },
+        //   ]);
+        // }
       }
     } catch (error) {
       console.error("Failed to send message:", error);
@@ -362,12 +367,12 @@ const ChatMessages = ({ roomId, onBack }) => {
           })}
 
         {(isAgentTyping || isSending) && (
-  <div className="flex justify-start items-center">
-    <div className="bg-zuri-bubble-agent rounded-2xl rounded-bl-md px-4 py-3">
-      <SyncLoader color="#9ca3af" size={6} speedMultiplier={0.7} />
-    </div>
-  </div>
-)}
+          <div className="flex justify-start items-center">
+            <div className="bg-zuri-bubble-agent rounded-2xl rounded-bl-md px-4 py-3">
+              <SyncLoader color="#9ca3af" size={6} speedMultiplier={0.7} />
+            </div>
+          </div>
+        )}
 
         <div ref={messagesEndRef} />
 

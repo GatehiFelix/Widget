@@ -1,20 +1,20 @@
-import express from 'express';
-import http from 'http';
-import dotenv from 'dotenv';
-import 'colors';
-import { createRAGApplication } from './index.js';
-import { syncModels } from './models/index.js';
-import { initializeSocket } from './socket/index.js';
-import tenantRoutes from './routes/tenantRoutes.js';
-import documentRoutes from './routes/documentsRoutes.js';
-import queryRoutes from './routes/queryRoutes.js';
-import healthRoutes from './routes/healthRoutes.js';
-import chatRoutes from './routes/chatRoutes.js';
-import supportAgentRoutes from './routes/supportAgentRoutes.js';
-import logger from './utils/logger.js';
-import agentClient from './src/integrations/crmClient.js';
-import { ChatService } from '#services/chatService.js';
-import { emitNewMessage } from '#socket/index.js';
+import express from "express";
+import http from "http";
+import dotenv from "dotenv";
+import "colors";
+import { createRAGApplication } from "./index.js";
+import { syncModels } from "./models/index.js";
+import { initializeSocket } from "./socket/index.js";
+import tenantRoutes from "./routes/tenantRoutes.js";
+import documentRoutes from "./routes/documentsRoutes.js";
+import queryRoutes from "./routes/queryRoutes.js";
+import healthRoutes from "./routes/healthRoutes.js";
+import chatRoutes from "./routes/chatRoutes.js";
+import supportAgentRoutes from "./routes/supportAgentRoutes.js";
+import logger from "./utils/logger.js";
+import agentClient from "./src/integrations/crmClient.js";
+import { ChatService } from "#services/chatService.js";
+import { emitNewMessage } from "#socket/index.js";
 
 dotenv.config();
 
@@ -28,15 +28,15 @@ let ragApp;
 
 const initializeRAG = async () => {
   try {
-    logger.info('Initializing RAG Application...');
+    logger.info("Initializing RAG Application...");
     ragApp = await createRAGApplication({
       qdrant: { url: process.env.QDRANT_URL },
       llm: {},
       embedding: {},
     });
-    logger.info('RAG Application initialized successfully.');
+    logger.info("RAG Application initialized successfully.");
   } catch (error) {
-    logger.error('Error initializing RAG Application:', error);
+    logger.error("Error initializing RAG Application:", error);
     process.exit(1);
   }
 };
@@ -44,15 +44,39 @@ const initializeRAG = async () => {
 agentClient
   .connect()
   .on("widget_message_received", async (msg) => {
-    // Agent sent a chat message — save and push to customer UI
     try {
-      const { roomId, clientId, content, agentId } = msg;
-      if (!roomId || !clientId || !content) return;
+      const {
+        roomId,
+        clientId,
+        content,
+        agentId,
+        conversation_id,
+        client_id, // zuridesk backend sends this instead of clientId, we should support both for compatibility
+      } = msg;
+
+      const resolvedRoomId = roomId || conversation_id;
+      const resolvedClientId = clientId || client_id;
+
+      if (!resolvedRoomId || !resolvedClientId || !content) {
+        logger.warn(
+          "[AgentClient] widget_message_received missing fields:",
+          msg,
+        );
+        return;
+      }
 
       const saved = await ChatService.saveMessage(
-        roomId, clientId, content, "agent", null, agentId || null
+        resolvedRoomId,
+        resolvedClientId,
+        content,
+        "agent",
+        null,
+        agentId || null,
       );
-      emitNewMessage(roomId, clientId, saved);
+      emitNewMessage(resolvedRoomId, resolvedClientId, saved);
+      logger.info(
+        `[AgentClient] Agent message delivered to room ${resolvedRoomId}`,
+      );
     } catch (err) {
       logger.error("[AgentClient] widget_message_received error:", err.message);
     }
@@ -64,7 +88,8 @@ agentClient
       if (!roomId || !clientId) return;
 
       const saved = await ChatService.saveMessage(
-        roomId, clientId,
+        roomId,
+        clientId,
         `Agent ${agentName || "support"} has joined the conversation.`,
         "system",
       );
@@ -79,12 +104,12 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/api/health', healthRoutes);
-app.use('/api/query', queryRoutes);
-app.use('/api/tenants', tenantRoutes);
-app.use('/api/documents', documentRoutes);
-app.use('/api/chat', chatRoutes);
-app.use('/api/agents', supportAgentRoutes);
+app.use("/api/health", healthRoutes);
+app.use("/api/query", queryRoutes);
+app.use("/api/tenants", tenantRoutes);
+app.use("/api/documents", documentRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/agents", supportAgentRoutes);
 
 app.use((err, req, res, next) => {
   logger.error(err.stack);
@@ -103,7 +128,7 @@ const startServer = async () => {
       logger.info(`Environment: ${process.env.NODE_ENV}`);
     });
   } catch (error) {
-    logger.error('Server startup failed:', error.message);
+    logger.error("Server startup failed:", error.message);
     process.exit(1);
   }
 };

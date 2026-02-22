@@ -55,6 +55,14 @@ const ChatRoom = sequelize.define('ChatRoom', {
         type: DataTypes.STRING,
         allowNull: true
     },
+    agent_source: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    external_agent_id: {
+        type: DataTypes.BIGINT,
+        allowNull: true
+    },
     takeover: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

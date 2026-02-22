@@ -23,6 +23,7 @@ export const initializeSocket = (httpServer) => {
     // Combine allowed origins
     const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
         'http://localhost:3000',
+        'http://localhost:3001',
         'http://localhost:5173'
     ];
     
@@ -109,6 +110,38 @@ export const initializeSocket = (httpServer) => {
         
         socket.on('disconnect', (reason) => {
             logger.info(`Socket disconnected: ${socket.id}, reason: ${reason}`);
+        });
+    });
+
+    // --- WIDGET NAMESPACE SUPPORT ---
+    const widgetNamespace = io.of("/widget");
+
+    widgetNamespace.on("connection", (socket) => {
+        logger.info(`[Widget] Socket connected: ${socket.id}`);
+
+        socket.on("join_widget_conversation", ({ conversation_id }) => {
+            if (conversation_id) {
+                socket.join(`widget_conv_${conversation_id}`);
+                logger.info(`[Widget] Socket ${socket.id} joined widget_conv_${conversation_id}`);
+            }
+        });
+
+        socket.on("join_agent_room", ({ agentEmail }) => {
+        if (agentEmail) {
+            socket.join(`agent_${agentEmail}`);
+            logger.info(`[Widget] Agent ${agentEmail} joined their room`);
+            }
+        });
+
+        socket.on("join_supervisor_room", ({ clientId }) => {
+            if (clientId) {
+                socket.join(`supervisor_${clientId}`);
+                logger.info(`[Widget] Supervisor joined room for client ${clientId}`);
+            }
+        });
+
+        socket.on("disconnect", (reason) => {
+            logger.info(`[Widget] Socket disconnected: ${socket.id}, reason: ${reason}`);
         });
     });
 
