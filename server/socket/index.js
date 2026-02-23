@@ -173,6 +173,7 @@ export const emitToRoom = (roomId, clientId, event, data) => {
  * Emit new message event
  */
 export const emitNewMessage = (roomId, clientId, message) => {
+    console.log("emitNewMessage firing for room:", roomId, "msgId:", message.id);
     emitToRoom(roomId, clientId, 'new_message', {
         id: message.id,
         content: message.content,

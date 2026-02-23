@@ -42,7 +42,7 @@ const startSession = async (clientId, sessionToken, visitorId, roomId = null) =>
   );
 
   //join conversation room for socket.io
-  agentClient.joinConversation(session.room.id, clientId);
+  // agentClient.joinConversation(session.room.id, clientId);
 
   agentClient.joinConversation(session.room.id, clientId);
   emitTyping(session.room.id, clientId, "ai", false);
@@ -147,7 +147,7 @@ const sendMessageToAgent = async (message, room = null, client = null) => {
     };
     console.log("Enriched message payload for agent backend:", enriched);
 
-    agentClient.joinConversation(resolvedRoom.id, resolvedClient.id); 
+    // agentClient.joinConversation(resolvedRoom.id, resolvedClient.id); 
     agentClient.sendMessage(enriched);
   } catch (err) {
     logger.error("Failed to send message to agent backend via socket:", err.message);
@@ -582,8 +582,6 @@ const closeSession = async (roomId, clientId) => {
 
   return { closed: true };
 };
-
-
 
 
 export const ChatService = {

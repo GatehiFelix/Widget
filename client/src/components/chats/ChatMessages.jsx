@@ -47,9 +47,12 @@ const ChatMessages = ({ roomId, onBack }) => {
     scrollToBottom();
   }, [messages]);
 
+
   // Real-time socket connection for new messages
   useEffect(() => {
     if (!session || !session.roomId || !session.clientId) return;
+
+
 
     const socketUrl = window.location.origin;
     
@@ -60,7 +63,6 @@ const ChatMessages = ({ roomId, onBack }) => {
     });
 
 
-
     // Join the correct room format RAG uses
     socket.emit("join_room", { 
       roomId: session.roomId, 
@@ -69,28 +71,31 @@ const ChatMessages = ({ roomId, onBack }) => {
 
     // All messages come through new_message on the default namespace
     const handleNewMessage = (msg) => {
-  setMessages((prev) => {
-    // Remove temp message if this is the real version of it
-    const withoutTemp = msg.sender_type === "customer"
-      ? prev.filter((m) => !m.isTemp)
-      : prev;
+      console.log("Received new_message via socket:", msg.id, msg.sender_type, msg.content?.slice(0, 30));
+      console.log("current message count:", messages.length);
+      setMessages((prev) => {
+        // Always remove temp messages when real customer msg arrives
+        const withoutTemp = msg.sender_type === "customer"
+          ? prev.filter((m) => !m.isTemp)
+          : prev;
 
-    if (withoutTemp.some((m) => m.id === msg.id)) return withoutTemp;
+        // Deduplicate ALL message types by id
+        if (withoutTemp.some((m) => m.id === msg.id)) return withoutTemp;
 
-    return [
-      ...withoutTemp,
-      {
-        id: msg.id,
-        content: msg.content,
-        sender: msg.sender_type === "customer" ? "user" 
-               : msg.sender_type === "ai" ? "agent" 
-               : "system",
-        timestamp: new Date(msg.created_at),
-        agentName: msg.sender_type !== "customer" ? "ZuriDesk AI" : undefined,
-      },
-    ];
-  });
-};
+        return [
+          ...withoutTemp,
+          {
+            id: msg.id,
+            content: msg.content,
+            sender: msg.sender_type === "customer" ? "user"
+                  : msg.sender_type === "ai" ? "agent"
+                  : "system",
+            timestamp: new Date(msg.created_at),
+            agentName: msg.sender_type !== "customer" ? "ZuriDesk AI" : undefined,
+          },
+        ];
+      });
+    };
     socket.on("new_message", handleNewMessage);
     
     socket.on("typing", (data) => {
@@ -108,7 +113,7 @@ const ChatMessages = ({ roomId, onBack }) => {
       socket.off("typing");
       socket.disconnect();
     };
-  }, [session?.roomId, session?.clientId, session]);
+  }, [session?.roomId, session?.clientId]);
 
   // Initialize session on mount
   useEffect(() => {
