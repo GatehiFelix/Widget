@@ -172,6 +172,17 @@ const processMessage = async (clientId, roomId, content) => {
     Client.findByPk(clientId),
   ]);
 
+  if (chatRoom?.takeover) {
+    await sendMessageToAgent(customerMessage, chatRoom, resolvedClient);
+    emitTyping(roomId, clientId, "ai", false);
+    return {
+      handover: true,
+      reason: "agent_takeover",
+      customerMessage,
+      assignedAgent: null,
+    };
+  }
+
   // Send customer message to agent backend — pass resolved room/client to avoid re-fetch
   await sendMessageToAgent(customerMessage, chatRoom, resolvedClient);
   emitTyping(roomId, clientId, "ai", true);
