@@ -55,44 +55,6 @@ const initializeRAG = async () => {
 
 agentClient
   .connect()
-  .on("widget_message_received", async (msg) => {
-    try {
-      const {
-        roomId,
-        clientId,
-        content,
-        agentId,
-        conversation_id,
-        client_id, // zuridesk backend sends this instead of clientId, we should support both for compatibility
-      } = msg;
-
-      const resolvedRoomId = roomId || conversation_id;
-      const resolvedClientId = clientId || client_id;
-
-      if (!resolvedRoomId || !resolvedClientId || !content) {
-        logger.warn(
-          "[AgentClient] widget_message_received missing fields:",
-          msg,
-        );
-        return;
-      }
-
-      const saved = await ChatService.saveMessage(
-        resolvedRoomId,
-        resolvedClientId,
-        content,
-        "agent",
-        null,
-        agentId || null,
-      );
-      emitNewMessage(resolvedRoomId, resolvedClientId, saved);
-      logger.info(
-        `[AgentClient] Agent message delivered to room ${resolvedRoomId}`,
-      );
-    } catch (err) {
-      logger.error("[AgentClient] widget_message_received error:", err.message);
-    }
-  })
   .on("agent_assigned", async (msg) => {
     // Agent backend confirmed assignment — save system confirmation
     try {

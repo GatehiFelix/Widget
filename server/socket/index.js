@@ -71,12 +71,49 @@ export const initializeSocket = (httpServer) => {
         // ============================================
         
         // Listen for messages from widget (LLM/user)
-        socket.on('widget-message', (data) => {
-            io.emit('agent-message', data);
-            logger.info('[Widget->Agent] widget-message:', data);
-            broadcastActiveConversations();
-        });
+        // In RAG socket/index.js, inside widgetNamespace.on("connection")
+socket.on("widget_message", async (data) => {
+    logger.info(`[Widget] widget_message received from CRM:`, data);
+    
+    const { conversation_id, client_id, content, agentId, sender_type } = data;
+    
+    if (!conversation_id || !client_id || !content) {
+        logger.warn("[Widget] widget_message missing required fields");
+        return;
+    }
 
+    try {
+        // Save to DB — this is the single source of truth
+        const saved = await ChatService.saveMessage(
+            conversation_id,
+            client_id,
+            content,
+            sender_type || "agent",
+            null,
+            agentId || null,
+        );
+
+        // Emit to the customer widget room so they see the agent reply
+        emitNewMessage(conversation_id, client_id, saved);
+
+        // Also notify supervisor dashboard
+        const io = getIO();
+        io.of("/widget")
+            .to(`supervisor_${client_id}`)
+            .emit("new_conversation_message", {
+                id: saved.id,
+                conversation_id,
+                client_id,
+                content,
+                sender_type: "agent",
+                created_at: saved.created_at,
+            });
+
+        logger.info(`[Widget] Agent message saved and emitted for room ${conversation_id}`);
+    } catch (err) {
+        logger.error("[Widget] Failed to save agent message:", err.message);
+    }
+});
         // Listen for messages from agent
         socket.on('agent-message', (data) => {
             io.emit('widget-message', data);

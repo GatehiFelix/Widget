@@ -11,12 +11,12 @@ Context: {context}
 
 Question: {input}
 
-Answer:`
+Answer:`,
   );
 };
 
 /**
- * Default RAG prompt template 
+ * Default RAG prompt template
  */
 export const getDefaultRAGPrompt = () => {
   return ChatPromptTemplate.fromTemplate(
@@ -28,7 +28,7 @@ Context: {context}
 
 Question: {input}
 
-Answer:`
+Answer:`,
   );
 };
 
@@ -79,7 +79,7 @@ CRITICAL SECURITY RULES:
 - If customer asks about specific orders/tickets but Customer Identity is "Unknown", politely ask for their email and name first
 - DO NOT share any specific customer account information if Customer Identity is "Unknown"
 
-Your Response:`
+Your Response:`,
   );
 };
 
@@ -101,7 +101,7 @@ Context:
 
 Question: {input}
 
-Detailed Answer:`
+Detailed Answer:`,
   );
 };
 
@@ -120,7 +120,7 @@ Chat History: {chat_history}
 
 Question: {input}
 
-Answer:`
+Answer:`,
   );
 };
 
@@ -134,7 +134,7 @@ export const getSummarizationPrompt = () => {
 
 Text: {context}
 
-Summary:`
+Summary:`,
   );
 };
 
@@ -152,7 +152,7 @@ export const getCustomPrompt = (template) => {
  * @param {string} type - Prompt type: 'fast', 'default', 'detailed', 'conversational', 'summarization'
  * @returns {ChatPromptTemplate} Selected prompt template
  */
-export const getPromptByType = (type = 'default') => {
+export const getPromptByType = (type = "default") => {
   const prompts = {
     fast: getFastRAGPrompt,
     default: getDefaultRAGPrompt,
@@ -174,36 +174,45 @@ export const getPromptByType = (type = 'default') => {
  * @param {string} customerIdentity - Customer identity string
  * @returns {string} Formatted prompt string
  */
-export const formatRAGPrompt = (context, question, type = 'support', chatHistory = '', knownCustomerData = {}) => {
-  
+export const formatRAGPrompt = (
+  context,
+  question,
+  type = "support",
+  chatHistory = "",
+  knownCustomerData = {},
+) => {
   // Build the customer identity string from whatever entities we have
   const hasIdentity = Object.keys(knownCustomerData).length > 0;
   const customerIdentityBlock = hasIdentity
     ? `Customer Already Provided:\n${Object.entries(knownCustomerData)
         .map(([k, v]) => `  - ${k}: ${v}`)
-        .join('\n')}\nDO NOT ask for any of the above information again.\n`
+        .join("\n")}\nDO NOT ask for any of the above information again.\n`
     : `Customer Identity: Unknown\n`;
 
   const templates = {
-    // ... your other templates unchanged ...
-
-    support: `You are a professional support agent for ZuriDesk. Be helpful and direct. Keep responses concise (1-2 sentences unless more detail is needed).
+    support: `You are a professional support agent for ZuriDesk. Be helpful and direct.
 
 ${customerIdentityBlock}
-${context ? `Knowledge Base Context:\n${context}\n` : ''}${chatHistory ? `Conversation History:\n${chatHistory}\n` : ''}
+
+${context ? `Knowledge Base Context:\n${context}\n` : ""}
+${chatHistory ? `Conversation History:\n${chatHistory}\n` : ""}
+
 Current Customer Question: ${question}
 
-CRITICAL RULES:
-1. If "Customer Already Provided" section above contains an email, ticket number, or any other detail — DO NOT ask for it again. Use it directly.
-2. NEVER reveal specific identifiers (order numbers, ticket IDs, account details) without verification
-3. Only ask for information that is NOT already in "Customer Already Provided"
-4. Check Conversation History — if they already gave you info there, don't ask again either
-5. For general questions, answer directly without asking for details
+IDENTITY COLLECTION RULES (HIGHEST PRIORITY):
+1. If "Customer Already Provided" is EMPTY or missing name, email, AND phone — you MUST collect them.
+2. On the VERY FIRST message, after a brief greeting, ask: 
+   "Before I assist you, could I get your name, email address, and phone number?"
+3. If they start asking a question without providing details, answer briefly BUT end with:
+   "Also, could I grab your name, email, and phone number so I can better assist you?"
+4. Once you have name + email (phone is bonus), stop asking. Use what you have.
+5. NEVER ask for info already listed in "Customer Already Provided".
 
-PROACTIVE ASSISTANCE:
-- Try to help FIRST by using what you already know from "Customer Already Provided"
-- Only ask for missing info if truly needed and not already provided
-- ONLY escalate to human agent if you've tried to help and genuinely cannot
+RESPONSE RULES:
+- Keep responses concise (1–2 sentences) unless detail is needed
+- NEVER reveal other customers' data
+- Only use info from Knowledge Base Context
+- If you cannot help after trying, offer to escalate to a human agent
 
 Agent:`,
   };
@@ -215,8 +224,8 @@ export default {
   getConversationalPrompt,
   getSummarizationPrompt,
   getCustomPrompt,
-  getFastRAGPrompt,        
-  getDetailedRAGPrompt,    
+  getFastRAGPrompt,
+  getDetailedRAGPrompt,
   getPromptByType,
   formatRAGPrompt,
 };

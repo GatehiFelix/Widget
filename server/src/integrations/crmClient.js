@@ -13,8 +13,7 @@ import logger from "#utils/logger.js";
  */
 class AgentBackendClient {
   constructor() {
-    this.baseUrl = process.env.EXTERNAL_AGENT_BASE_URL;
-    this.apiKey = process.env.INTERNAL_API_KEY;
+   
     this.jwtSecret = process.env.JWT_SECRET;
     this.socketNamespace = "/widget";
  
@@ -31,6 +30,9 @@ class AgentBackendClient {
 
   connect() {
     if (this._socket?.connected) return this;
+
+     this.baseUrl = process.env.EXTERNAL_AGENT_BASE_URL;
+    this.apiKey = process.env.INTERNAL_API_KEY;
 
     const url = `${this.baseUrl}${this.socketNamespace}`;
     logger.info(`[AgentClient] Connecting to ${url}`);
@@ -223,22 +225,22 @@ const agentClient = new AgentBackendClient();
 export default agentClient;
 
 
-// agentClient.on("widget_message", (messageData) => {
-//   try {
-//     const io = getIO();
-//     if (messageData.conversation_id) {
-//       // Forward to all clients in the correct widget room/namespace
-//       io.of("/widget")
-//         .to(`widget_conv_${messageData.conversation_id}`)
-//         .emit("widget_message_received", messageData);
-//       console.log(`[CRMClient] Forwarded widget_message to widget_conv_${messageData.conversation_id}`);
-//       if (typeof logger !== 'undefined') {
-//         logger.info(`[CRMClient] Forwarded widget_message to widget_conv_${messageData.conversation_id}`);
-//       }
-//     }
-//   } catch (err) {
-//     if (typeof logger !== 'undefined') {
-//       logger.error(`[CRMClient] Error forwarding widget_message: ${err.message}`);
-//     }
-//   }
-// });
+agentClient.on("widget_message", (messageData) => {
+  try {
+    const io = getIO();
+    if (messageData.conversation_id) {
+      // Forward to all clients in the correct widget room/namespace
+      io.of("/widget")
+        .to(`widget_conv_${messageData.conversation_id}`)
+        .emit("widget_message_received", messageData);
+      console.log(`[CRMClient] Forwarded widget_message to widget_conv_${messageData.conversation_id}`);
+      if (typeof logger !== 'undefined') {
+        logger.info(`[CRMClient] Forwarded widget_message to widget_conv_${messageData.conversation_id}`);
+      }
+    }
+  } catch (err) {
+    if (typeof logger !== 'undefined') {
+      logger.error(`[CRMClient] Error forwarding widget_message: ${err.message}`);
+    }
+  }
+});

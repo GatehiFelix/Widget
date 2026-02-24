@@ -393,6 +393,22 @@ const processMessage = async (clientId, roomId, content) => {
       queryDuration,
     });
 
+    const intentToUse = ragResponse?.intent 
+
+if (intentToUse) {
+  // Capitalize each word for display e.g. "account access" → "Account Access"
+  const detectedTopic = intentToUse
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+
+  await ChatRoom.update(
+    { topic: detectedTopic },
+    { where: { id: roomId, client_id: clientId } }
+  );
+  logger.info(`Room ${roomId} topic updated to: ${detectedTopic}`);
+}
+
     emitNewMessage(roomId, clientId, aiMessage);
     logger.info(`AI message saved: ${aiMessage.id}`);
 

@@ -302,3 +302,29 @@ const getActiveConversations = async (req, res) => {
 
   res.json({ success: true, data: rooms });
 };
+
+
+
+/**
+ * @desc  Agent sends message to widget 
+ * @route POST /api/chat/agent-message
+ */
+
+export const saveAgentMessage = asyncHandler(async (req, res) => {
+  const { room_id, client_id, content, sender_type, metadata } = req.body;
+
+  if (!room_id || !client_id || !content) {
+    res.status(400);
+    throw new Error("room_id, client_id, content are required");
+  }
+
+  const saved = await ChatService.saveMessage(
+    room_id,
+    client_id,
+    content,
+    sender_type || "agent",
+    metadata || null,
+  );
+
+  res.json({ success: true, data: saved });
+});

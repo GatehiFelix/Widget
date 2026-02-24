@@ -4,11 +4,11 @@ import crypto from "crypto";
 import pTimeout from "p-timeout";
 
 import { createRAGPipeline } from "#core/rag/ragPipeline.js";
+import { createLLMService } from "#core/llm/llmService.js";
 import logger from "#utils/logger.js";
 
 
 import { searchTickets, semanticSearch as vectorSearchUtil } from "../utils/mysqlSearch.js";
-import { existsSync } from "fs";
 
 const queryQueue = new PQueue({
   concurrency: 10,
@@ -259,6 +259,8 @@ export const createQueryService = async (options = {}) => {
     }
   };
 
+  const llmService = createLLMService(options);
+
   /**
    * Extract structured customer information from a text message
    * @param {string} text - The text to extract entities from
@@ -296,6 +298,43 @@ Respond ONLY with a valid JSON object, no explanation, no markdown.`;
         logger.warn('Entity extraction parse failed:', e.message);
         return {};
     }
+};
+
+
+  const extractIntent = async (text) => {
+  const prompt = `You are analyzing a customer support message for a SaaS platform.
+
+The platform serves many different business types (real estate, finance, retail, logistics, healthcare, etc.).
+
+Task: Identify the PRIMARY intent of this message in 2-4 words maximum.
+Be specific to what the customer actually wants, not a generic category.
+
+Examples:
+- "I can't log in" → "account access"
+- "My invoice shows wrong amount" → "billing dispute"  
+- "The dashboard is not loading" → "technical issue"
+- "Where is my delivery?" → "delivery status"
+- "I want to list a property" → "property listing"
+- "How do I upgrade my plan?" → "plan upgrade"
+- "I need a refund" → "refund request"
+
+Message: "${text}"
+
+Reply with ONLY the 2-4 word intent phrase in lowercase. No punctuation, no explanation.`;
+
+  try {
+    const result = await llmService.generate(prompt);
+    const intent = result.text
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z\s]/g, '')  // allow spaces for multi-word
+      .trim();
+
+    return intent.length > 0 ? intent : 'general inquiry';
+  } catch (e) {
+    logger.warn('Intent extraction failed:', e.message);
+    return null;
+  }
 };
 
   /**
@@ -402,6 +441,7 @@ Respond ONLY with a valid JSON object, no explanation, no markdown.`;
     classifyQuery,
     hybridRetrieve,
     extractEntities,
+    extractIntent,
     streamQuery,
     semanticSearch,  
     clearCache,
