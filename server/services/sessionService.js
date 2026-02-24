@@ -297,7 +297,10 @@ const resumeOrCreateSession = async (clientId, sessionToken, visitorId, roomId =
           id: roomId,
           client_id: clientId,
           widget_visitor_id: visitorId, // Verify it belongs to this visitor
-          status: 'active'
+          status: 'active',
+          last_activity_at: {
+            [Op.gte]: new Date(Date.now() -24 * 60 * 60 * 1000)
+          }
         },
         transaction: t
       });

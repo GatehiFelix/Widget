@@ -12,10 +12,13 @@ export const chatApiSlice = apiSlice.injectEndpoints({
             invalidatesTags: ['Chat']
         }),
         sendMessage: builder.mutation({
-            query: ({ clientId, roomId, content }) => ({
+            query: ({ clientId, roomId, content, accessToken }) => ({
                 url: `${CHAT_URL}/message`,
                 method: 'POST',
-                body: { clientId, roomId, content }
+                body: { clientId, roomId, content },
+                headers: {
+                    ...(accessToken && { Authorization: `Bearer ${accessToken}` })  // 👈
+                },
             }),
             invalidatesTags: ['Chat']
         }),

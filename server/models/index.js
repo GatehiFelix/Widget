@@ -9,6 +9,7 @@ import User from './users.js';
 import ChatRoom from './chatrooms.js';
 import Message from './messages.js';
 import SessionContext from './sessionContext.js';
+import RefreshToken from './refreshTokens.js';
 
 // Client associations
 Client.hasMany(User, { foreignKey: 'client_id' });
@@ -25,6 +26,8 @@ ChatRoom.belongsTo(Client, { foreignKey: 'client_id' });
 ChatRoom.belongsTo(User, { foreignKey: 'assigned_agent_id' });
 ChatRoom.hasMany(Message, { foreignKey: 'room_id' });
 ChatRoom.hasOne(SessionContext, { foreignKey: 'room_id' });
+ChatRoom.hasMany(RefreshToken, { foreignKey: 'tenant_id', onDelete: 'CASCADE'});
+RefreshToken.belongsTo(ChatRoom, { foreignKey: 'tenant_id' });
 
 // Message associations
 Message.belongsTo(ChatRoom, { foreignKey: 'room_id' });
@@ -34,6 +37,7 @@ Message.belongsTo(User, { foreignKey: 'sender_id' });
 // SessionContext associations
 SessionContext.belongsTo(ChatRoom, { foreignKey: 'room_id' });
 SessionContext.belongsTo(Client, { foreignKey: 'client_id' });
+
 
 async function syncModels(options = {}) {
     const { force = false, alter = false } = options;
@@ -64,5 +68,6 @@ export {
     ChatRoom,
     Message,
     SessionContext,
+    RefreshToken,
     syncModels
 };

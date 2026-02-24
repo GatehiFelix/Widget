@@ -4,7 +4,6 @@ import {
   getTenantController,
   deleteTenantController
 } from '#controllers/tenantController.js';
-import { protect, adminOnly } from '#middleware/authMiddleware.js';
 import { validateTenantId } from '#middleware/validateMiddleware.js';
 
 const router = express.Router();

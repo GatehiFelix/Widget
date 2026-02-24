@@ -13,6 +13,8 @@ const getOrCreateVisitorId = () => {
 const initialState = {
   sessionToken: localStorage.getItem('chat_session') || null,
   visitorId: getOrCreateVisitorId(), // Always use existing or create new
+  accessToken: null, 
+  refreshToken: null,
 };
 
 const authSlice = createSlice({
@@ -35,14 +37,19 @@ const authSlice = createSlice({
         localStorage.setItem('chat_visitor_id', action.payload);
       }
     },
+    setTokens(state, action) {
+      state.accessToken =action.payload.accessToken;
+      state.refreshToken = action.payload.refreshToken;
+    },
     resetAuth(state) {
       // Only clear sessionToken, keep visitorId
       state.sessionToken = null;
+      state.accessToken = null;
+      state.refreshToken = null; 
       localStorage.removeItem('chat_session');
-      // visitorId stays the same!
     },
   },
 });
 
-export const { setSessionToken, setVisitorId, resetAuth } = authSlice.actions;
+export const { setSessionToken, setVisitorId, setTokens, resetAuth } = authSlice.actions;
 export default authSlice.reducer;

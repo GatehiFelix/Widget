@@ -15,6 +15,9 @@ import logger from "./utils/logger.js";
 import agentClient from "./src/integrations/crmClient.js";
 import { ChatService } from "#services/chatService.js";
 import { emitNewMessage } from "#socket/index.js";
+import { getIO } from "./socket/index.js";
+import cors from "cors";
+
 
 dotenv.config();
 
@@ -23,6 +26,14 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 6000;
 
 app.use(express.json());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:5173'
+  ],
+  credentials: true
+}));
 
 let ragApp;
 
@@ -40,6 +51,7 @@ const initializeRAG = async () => {
     process.exit(1);
   }
 };
+
 
 agentClient
   .connect()

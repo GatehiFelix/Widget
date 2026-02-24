@@ -41,10 +41,7 @@ const startSession = async (clientId, sessionToken, visitorId, roomId = null) =>
     roomId || null,
   );
 
-  //join conversation room for socket.io
-  // agentClient.joinConversation(session.room.id, clientId);
 
-  agentClient.joinConversation(session.room.id, clientId);
   emitTyping(session.room.id, clientId, "ai", false);
 
   return {
@@ -192,34 +189,26 @@ const processMessage = async (clientId, roomId, content) => {
   };
 
   const assignAgent = async (agent) => {
+     const isExternal = agent.source === 'external' || !agent.isLocal; // whatever the agent object looks like
+    
     const updatePayload = {
-    assigned_agent_email: agent.email,
-    external_agent_id: agent.id,
-    agent_source: "external",
-    takeover: true,
-  };
+        assigned_agent_email: agent.email,
+        agent_source: isExternal ? "external" : "local",
+        takeover: true,
+        external_agent_id: isExternal ? Number(agent.id) : null,
+        assigned_agent_id: isExternal ? null : Number(agent.id),
+    };
 
-  if (updatePayload.agent_source === "external") {
-    updatePayload.external_agent_id = Number(agent.id);
-    updatePayload.assigned_agent_id = null; // clear local FK
-  } else {
-    updatePayload.assigned_agent_id = Number(agent.id); // local user, FK valid
-    updatePayload.external_agent_id = null;
-  }
-
-  await ChatRoom.update(updatePayload, {
-    where: { id: roomId, client_id: clientId },
-  });
-
+    await ChatRoom.update(updatePayload, {
+        where: { id: roomId, client_id: clientId },
+    });
     const updatedEntities = {
       ...context.collected_entities,
       assignedAgentEmail: agent.email,
       assignedAgentName: agent.name,
     };
 
-    await SessionContextService.updateEntities(roomId, clientId, {
-      collected_entities: updatedEntities,
-    });
+    await SessionContextService.updateEntities(roomId, clientId, updatedEntities);
     context.collected_entities = updatedEntities;
 
     const msg = await saveMessage(
@@ -241,7 +230,6 @@ const processMessage = async (clientId, roomId, content) => {
     return msg;
   };
 
-  // ── Handover branching ─────────────────────────────────────
 
   if (handoverResult?.shouldHandover) {
     if (!handoverResult.immediate) {
@@ -252,9 +240,7 @@ const processMessage = async (clientId, roomId, content) => {
         pendingHandover: true,
         handoverReason: handoverResult.reason,
       };
-      await SessionContextService.updateContext(roomId, clientId, {
-        collected_entities: updatedEntities,
-      });
+      await SessionContextService.updateEntities(roomId, clientId, updatedEntities);
       context.collected_entities = updatedEntities;
 
     } else {
@@ -330,9 +316,7 @@ const processMessage = async (clientId, roomId, content) => {
         ...extractedEntities,
       };
 
-      await SessionContextService.updateContext(roomId, clientId, {
-        collected_entities: context.collected_entities,
-      });
+      await SessionContextService.updateEntities(roomId, clientId, context.collected_entities);
 
       const roomUpdates = {};
       if (extractedEntities.email) roomUpdates.customer_email = extractedEntities.email;
@@ -354,9 +338,7 @@ const processMessage = async (clientId, roomId, content) => {
       delete context.collected_entities.pendingHandover;
       delete context.collected_entities.handoverReason;
 
-      await SessionContextService.updateContext(roomId, clientId, {
-        collected_entities: context.collected_entities,
-      });
+      await SessionContextService.updateEntities(roomId, clientId, context.collected_entities);
 
       const agent = await pickAgent();
       if (agent) {
@@ -419,12 +401,10 @@ const processMessage = async (clientId, roomId, content) => {
 
     // 9. Merge any entities the RAG pipeline extracted
     if (ragResponse?.extractedEntities) {
-      await SessionContextService.updateContext(roomId, clientId, {
-        collected_entities: {
-          ...context.collected_entities,
-          ...ragResponse.extractedEntities,
-        },
-      });
+      await SessionContextService.updateEntities(roomId, clientId, {
+    ...context.collected_entities,
+    ...ragResponse.extractedEntities,
+});
     }
 
     return { customerMessage, aiMessage, sources: ragResponse?.sources || [] };

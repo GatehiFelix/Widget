@@ -1,5 +1,5 @@
 
-import asyncHandler from "../middleware/asyncHandler.js";
+import asyncHandler from "express-async-handler";
 import logger from "../utils/logger.js";
 import { PerformanceTracker } from "../utils/performanceTracker.js";
 import { getState, setState, clearState } from '../utils/conversationState.js';

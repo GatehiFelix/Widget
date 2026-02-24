@@ -39,7 +39,7 @@ const ChatHistory = ({ onSelectConversation }) => {
     onSelectConversation(null); 
     }; 
 
-  const clientId = 1; // Replace with actual clientId logic
+  const clientId = 4; // Replace with actual clientId logic
   const {
     data: chatHistory,
     isLoading,

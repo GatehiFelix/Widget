@@ -1,76 +1,115 @@
 import jwt from 'jsonwebtoken';
-import { asyncHandler } from './asyncHandler.js';
+import  asyncHandler  from 'express-async-handler';
 import logger from '../utils/logger.js';
+import { generateAccessToken, generateRefreshToken } from '../utils/tokenUtils.js';
+import { RefreshToken,  Client} from '../models/index.js';
 
 /**
- * @desc Protect routes - verify JWT token
+ * Public endpoint — widget calls this on load with tenant API key
+ * POST /auth/widget-session
+ */
+export const issueWidgetSession = asyncHandler(async (req, res) => {
+    const { api_key } = req.body;
+
+    // Look up tenant by their API key
+    const tenant = await Client.findOne({ api_key });
+    if (!tenant) {
+        return res.status(401).json({ success: false, error: 'Invalid API key' });
+    }
+
+    // Create an anonymous session ID for this widget user
+    const sessionId = crypto.randomUUID();
+
+    const accessToken = generateAccessToken(sessionId, tenant.id);
+    const refreshToken = generateRefreshToken(sessionId, tenant.id);
+
+    // Persist refresh token so we can validate + rotate it later
+    await RefreshToken.create({
+        token: refreshToken,
+        session_id: sessionId,
+        tenant_id: tenant.id,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    logger.info(`Widget session issued for tenant ${tenant.id}`);
+
+    res.json({
+        success: true,
+        accessToken,
+        refreshToken,
+        expiresIn: 15 * 60, // seconds — widget uses this to schedule refresh
+    });
+});
+
+/**
+ * Refresh endpoint — widget calls this when access token is expiring
+ * POST /auth/refresh
+ */
+export const refreshSession = asyncHandler(async (req, res) => {
+    const { refreshToken } = req.body;
+    if (!refreshToken) return res.status(401).json({ success: false, error: 'No refresh token' });
+
+    let decoded;
+    try {
+        decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    } catch (err) {
+        return res.status(401).json({ success: false, error: 'Invalid or expired refresh token' });
+    }
+
+    const stored = await RefreshToken.findOne({ where: { token: refreshToken } });
+    if (!stored) return res.status(401).json({ success: false, error: 'Token reused or revoked' });
+
+    await RefreshToken.destroy({ where: { token: refreshToken } });
+
+    const newAccessToken = generateAccessToken(decoded.sessionId, decoded.tenantId);
+    const newRefreshToken = generateRefreshToken(decoded.sessionId, decoded.tenantId);
+
+    await RefreshToken.create({
+        token: newRefreshToken,
+        session_id: String(decoded.sessionId),
+        tenant_id: String(decoded.tenantId),
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    res.json({ success: true, accessToken: newAccessToken, refreshToken: newRefreshToken, expiresIn: 15 * 60 });
+});
+
+/**
+ * Protect middleware — same idea as yours but uses the access secret
+ * and validates the token type
  */
 export const protect = asyncHandler(async (req, res, next) => {
-    let token;
+    const authHeader = req.headers.authorization;
 
-    // Check for token in Authorization header
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-        try {
-            // Get token from header
-            token = req.headers.authorization.split(' ')[1];
-
-            // Verify token
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-            // Add user info to request
-            req.user = {
-                id: decoded.id,
-                tenant_id: decoded.tenant_id,
-                role: decoded.role,
-            };
-
-            logger.info(`User ${decoded.id} authenticated for tenant ${decoded.tenant_id}`);
-            next();
-        } catch (error) {
-            logger.error(`Token verification failed: ${error.message}`);
-            res.status(401).json({
-                success: false,
-                error: 'Not authorized, token failed'
-            });
-        }
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'No token provided' });
     }
 
-    if (!token) {
-        logger.warn('Access attempt without token');
+    const token = authHeader.split(' ')[1];
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+
+        if (decoded.type !== 'access') {
+            return res.status(401).json({ success: false, error: 'Wrong token type' });
+        }
+
+        req.session = {
+            sessionId: decoded.sessionId,
+            tenantId: decoded.tenantId,
+        };
+
+        logger.info(`Session ${decoded.sessionId} authenticated for tenant ${decoded.tenantId}`);
+        next();
+    } catch (error) {
+        logger.error(`Access token verification failed: ${error.message}`);
+
+        // Tell the widget specifically that it needs to refresh
+        const isExpired = error.name === 'TokenExpiredError';
         res.status(401).json({
             success: false,
-            error: 'Not authorized, no token'
+            error: isExpired ? 'Token expired' : 'Token invalid',
+            code: isExpired ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID',
         });
     }
 });
-
-/**
- * @desc Admin only access
- */
-export const adminOnly = asyncHandler(async (req, res, next) => {
-    if (req.user && req.user.role === 'admin') {
-        logger.info(`Admin access granted for user ${req.user.id}`);
-        next();
-    } else {
-        logger.warn(`Admin access denied for user ${req.user?.id || 'unknown'}`);
-        res.status(403).json({
-            success: false,
-            error: 'Not authorized, admin access only'
-        });
-    }
-});
-
-/**
- * @desc Generate JWT token
- * @param {string} id - User ID
- * @param {string} tenant_id - Tenant ID
- * @param {string} role - User role (admin, user)
- * @returns {string} JWT token
- */
-export const generateToken = (id, tenant_id, role = 'user') => {
-    return jwt.sign(
-        { id, tenant_id, role },
-        process.env.JWT_SECRET,
-        { expiresIn: '30d' }
-    );
-};
