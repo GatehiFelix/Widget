@@ -1,5 +1,6 @@
-import { Server } from 'socket.io';
-import logger from '#utils/logger.js';
+import { Server } from "socket.io";
+import logger from "#utils/logger.js";
+import { ChatService } from "#services/chatService.js";
 
 let io = null;
 
@@ -10,87 +11,134 @@ const activeConversations = {};
  * Helper to broadcast active conversations
  */
 const broadcastActiveConversations = () => {
-    if (!io) return;
-    const conversations = Object.values(activeConversations);
-    io.emit('active-conversations', conversations);
-    logger.info('[Broadcast] active-conversations:', conversations);
+  if (!io) return;
+  const conversations = Object.values(activeConversations);
+  io.emit("active-conversations", conversations);
+  logger.info("[Broadcast] active-conversations:", conversations);
 };
 
 /**
  * Initialize Socket.io server with both chat and agent functionality
  */
 export const initializeSocket = (httpServer) => {
-    // Combine allowed origins
-    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
-        'http://localhost:3000',
-        'http://localhost:3001',
-        'http://localhost:5173'
-    ];
-    
-    if (process.env.CLIENT_URL && !allowedOrigins.includes(process.env.CLIENT_URL)) {
-        allowedOrigins.push(process.env.CLIENT_URL);
-    }
+  // Combine allowed origins
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:5173",
+  ];
 
-    io = new Server(httpServer, {
-        cors: {
-            origin: allowedOrigins,
-            methods: ['GET', 'POST'],
-            credentials: true
-        },
-        pingTimeout: 60000,
-        pingInterval: 25000
+  if (
+    process.env.CLIENT_URL &&
+    !allowedOrigins.includes(process.env.CLIENT_URL)
+  ) {
+    allowedOrigins.push(process.env.CLIENT_URL);
+  }
+
+  io = new Server(httpServer, {
+    cors: {
+      origin: allowedOrigins,
+      methods: ["GET", "POST"],
+      credentials: true,
+    },
+    pingTimeout: 60000,
+    pingInterval: 25000,
+  });
+
+  io.on("connection", (socket) => {
+    logger.info(`Socket connected: ${socket.id}`);
+
+    // Join a chat room
+    socket.on("join_room", ({ roomId, clientId }) => {
+      const room = `room_${roomId}_${clientId}`;
+      socket.join(room);
+      logger.info(`Socket ${socket.id} joined room: ${room}`);
+
+      socket.emit("room_joined", { roomId, clientId });
     });
 
-    io.on('connection', (socket) => {
-        logger.info(`Socket connected: ${socket.id}`);
+    // Leave a chat room
+    socket.on("leave_room", ({ roomId, clientId }) => {
+      const room = `room_${roomId}_${clientId}`;
+      socket.leave(room);
+      logger.info(`Socket ${socket.id} left room: ${room}`);
+    });
 
-        // Join a chat room
-        socket.on('join_room', ({ roomId, clientId }) => {
-            const room = `room_${roomId}_${clientId}`;
-            socket.join(room);
-            logger.info(`Socket ${socket.id} joined room: ${room}`);
-            
-            socket.emit('room_joined', { roomId, clientId });
-        });
+    // Typing indicator
+    socket.on("typing", ({ roomId, clientId, isTyping }) => {
+      const room = `room_${roomId}_${clientId}`;
+      socket.to(room).emit("user_typing", { isTyping });
+    });
 
-        // Leave a chat room
-        socket.on('leave_room', ({ roomId, clientId }) => {
-            const room = `room_${roomId}_${clientId}`;
-            socket.leave(room);
-            logger.info(`Socket ${socket.id} left room: ${room}`);
-        });
+    // ============================================
+    // NEW WIDGET-AGENT BROADCASTING
+    // ============================================
 
-        // Typing indicator
-        socket.on('typing', ({ roomId, clientId, isTyping }) => {
-            const room = `room_${roomId}_${clientId}`;
-            socket.to(room).emit('user_typing', { isTyping });
-        });
+    // Listen for messages from widget (LLM/user)
+    // In RAG socket/index.js, inside widgetNamespace.on("connection")
 
-        // ============================================
-        // NEW WIDGET-AGENT BROADCASTING
-        // ============================================
-        
-        // Listen for messages from widget (LLM/user)
-        // In RAG socket/index.js, inside widgetNamespace.on("connection")
-socket.on("widget_message", async (data) => {
-    logger.info(`[Widget] widget_message received from CRM:`, data);
-    
-    const { conversation_id, client_id, content, agentId, sender_type } = data;
-    
-    if (!conversation_id || !client_id || !content) {
+    // Listen for messages from agent
+    socket.on("agent-message", (data) => {
+      io.emit("widget-message", data);
+      logger.info("[Agent->Widget] agent-message:", data);
+      broadcastActiveConversations();
+    });
+
+    // Start a conversation
+    socket.on("start-conversation", (conversation) => {
+      activeConversations[conversation.id] = conversation;
+      logger.info("[Conversation] Started:", conversation);
+      broadcastActiveConversations();
+    });
+
+    // End or remove a conversation
+    socket.on("end-conversation", (conversationId) => {
+      delete activeConversations[conversationId];
+      logger.info("[Conversation] Ended:", conversationId);
+      broadcastActiveConversations();
+    });
+
+    // Client requests current active conversations
+    socket.on("get-active-conversations", () => {
+      socket.emit("active-conversations", Object.values(activeConversations));
+      logger.info("[Request] get-active-conversations");
+    });
+
+    // ============================================
+    // DISCONNECT (Shared)
+    // ============================================
+
+    socket.on("disconnect", (reason) => {
+      logger.info(`Socket disconnected: ${socket.id}, reason: ${reason}`);
+    });
+  });
+
+  // --- WIDGET NAMESPACE SUPPORT ---
+  const widgetNamespace = io.of("/widget");
+
+  widgetNamespace.on("connection", (socket) => {
+    logger.info(`[Widget] Socket connected: ${socket.id}`);
+
+    socket.on("widget_message", async (data) => {
+      logger.info(`[Widget] widget_message received from CRM:`, data);
+
+      const { conversation_id, client_id, content, agentId, sender_type } =
+        data;
+
+      if (!conversation_id || !client_id || !content) {
         logger.warn("[Widget] widget_message missing required fields");
         return;
-    }
+      }
 
-    try {
+      try {
         // Save to DB — this is the single source of truth
         const saved = await ChatService.saveMessage(
-            conversation_id,
-            client_id,
-            content,
-            sender_type || "agent",
-            null,
-            agentId || null,
+          conversation_id,
+          client_id,
+          content,
+          sender_type || "agent",
+          null,
+          agentId || null,
         );
 
         // Emit to the customer widget room so they see the agent reply
@@ -99,181 +147,160 @@ socket.on("widget_message", async (data) => {
         // Also notify supervisor dashboard
         const io = getIO();
         io.of("/widget")
-            .to(`supervisor_${client_id}`)
-            .emit("new_conversation_message", {
-                id: saved.id,
-                conversation_id,
-                client_id,
-                content,
-                sender_type: "agent",
-                created_at: saved.created_at,
-            });
+          .to(`supervisor_${client_id}`)
+          .emit("new_conversation_message", {
+            id: saved.id,
+            conversation_id,
+            client_id,
+            content,
+            sender_type: "agent",
+            created_at: saved.created_at,
+          });
 
-        logger.info(`[Widget] Agent message saved and emitted for room ${conversation_id}`);
-    } catch (err) {
+        logger.info(
+          `[Widget] Agent message saved and emitted for room ${conversation_id}`,
+        );
+      } catch (err) {
         logger.error("[Widget] Failed to save agent message:", err.message);
-    }
-});
-        // Listen for messages from agent
-        socket.on('agent-message', (data) => {
-            io.emit('widget-message', data);
-            logger.info('[Agent->Widget] agent-message:', data);
-            broadcastActiveConversations();
-        });
-
-        // Start a conversation
-        socket.on('start-conversation', (conversation) => {
-            activeConversations[conversation.id] = conversation;
-            logger.info('[Conversation] Started:', conversation);
-            broadcastActiveConversations();
-        });
-
-        // End or remove a conversation
-        socket.on('end-conversation', (conversationId) => {
-            delete activeConversations[conversationId];
-            logger.info('[Conversation] Ended:', conversationId);
-            broadcastActiveConversations();
-        });
-
-        // Client requests current active conversations
-        socket.on('get-active-conversations', () => {
-            socket.emit('active-conversations', Object.values(activeConversations));
-            logger.info('[Request] get-active-conversations');
-        });
-
-        // ============================================
-        // DISCONNECT (Shared)
-        // ============================================
-        
-        socket.on('disconnect', (reason) => {
-            logger.info(`Socket disconnected: ${socket.id}, reason: ${reason}`);
-        });
+      }
     });
 
-    // --- WIDGET NAMESPACE SUPPORT ---
-    const widgetNamespace = io.of("/widget");
-
-    widgetNamespace.on("connection", (socket) => {
-        logger.info(`[Widget] Socket connected: ${socket.id}`);
-
-        socket.on("join_widget_conversation", ({ conversation_id }) => {
-            if (conversation_id) {
-                socket.join(`widget_conv_${conversation_id}`);
-                logger.info(`[Widget] Socket ${socket.id} joined widget_conv_${conversation_id}`);
-            }
-        });
-
-        socket.on("join_agent_room", ({ agentEmail }) => {
-        if (agentEmail) {
-            socket.join(`agent_${agentEmail}`);
-            logger.info(`[Widget] Agent ${agentEmail} joined their room`);
-            }
-        });
-
-        socket.on("join_supervisor_room", ({ clientId }) => {
-            if (clientId) {
-                socket.join(`supervisor_${clientId}`);
-                logger.info(`[Widget] Supervisor joined room for client ${clientId}`);
-            }
-        });
-
-        socket.on("disconnect", (reason) => {
-            logger.info(`[Widget] Socket disconnected: ${socket.id}, reason: ${reason}`);
-        });
+    socket.on("join_widget_conversation", ({ conversation_id }) => {
+      if (conversation_id) {
+        socket.join(`widget_conv_${conversation_id}`);
+        logger.info(
+          `[Widget] Socket ${socket.id} joined widget_conv_${conversation_id}`,
+        );
+      }
     });
 
-    logger.info('Socket.io initialized with chat and agent support');
-    return io;
+    socket.on("join_agent_room", ({ agentEmail }) => {
+      if (agentEmail) {
+        socket.join(`agent_${agentEmail}`);
+        logger.info(`[Widget] Agent ${agentEmail} joined their room`);
+      }
+    });
+
+    socket.on("join_supervisor_room", ({ clientId }) => {
+      if (clientId) {
+        socket.join(`supervisor_${clientId}`);
+        logger.info(`[Widget] Supervisor joined room for client ${clientId}`);
+      }
+    });
+
+    socket.on("disconnect", (reason) => {
+      logger.info(
+        `[Widget] Socket disconnected: ${socket.id}, reason: ${reason}`,
+      );
+    });
+  });
+
+  logger.info("Socket.io initialized with chat and agent support");
+  return io;
 };
 
 /**
  * Get Socket.io instance
  */
 export const getIO = () => {
-    if (!io) {
-        throw new Error('Socket.io not initialized');
-    }
-    return io;
+  if (!io) {
+    throw new Error("Socket.io not initialized");
+  }
+  return io;
 };
 
 /**
  * Emit message to a specific room
  */
 export const emitToRoom = (roomId, clientId, event, data) => {
-    if (!io) return;
-    
-    const room = `room_${roomId}_${clientId}`;
-    io.to(room).emit(event, data);
+  if (!io) return;
+
+  const room = `room_${roomId}_${clientId}`;
+  io.to(room).emit(event, data);
 };
 
 /**
  * Emit new message event
  */
 export const emitNewMessage = (roomId, clientId, message) => {
-    console.log("emitNewMessage firing for room:", roomId, "msgId:", message.id);
-    emitToRoom(roomId, clientId, 'new_message', {
-        id: message.id,
-        content: message.content,
-        sender_type: message.sender_type,
-        created_at: message.created_at,
-        metadata: message.metadata
-    });
+  console.log("emitNewMessage firing for room:", roomId, "msgId:", message.id);
+  emitToRoom(roomId, clientId, "new_message", {
+    id: message.id,
+    content: message.content,
+    sender_type: message.sender_type,
+    created_at: message.created_at,
+    metadata: message.metadata,
+  });
 };
 
 /**
  * Map backend message to frontend-rich structure
  */
 export const mapMessageToFrontend = (message, clientId, user = null) => {
-    return {
-        id: message.id,
-        clientId: clientId,
-        name: user?.name || (message.sender_type === "ai" ? "AI Assistant" : "Customer"),
-        email: user?.email || "unknown@example.com",
-        avatar: user?.avatar || (message.sender_type === "ai"
-            ? "https://bit.ly/ai-avatar"
-            : "https://bit.ly/dan-abramov"),
-        topic: message.metadata?.intent || "General inquiry",
-        status: message.sender_type === "ai" ? "AI Handling" : (message.sender_type === "agent" ? "Agent" : "Customer"),
-        statusColor: message.sender_type === "ai" ? "blue.600" : (message.sender_type === "agent" ? "green.600" : "gray.600"),
-        lastMessage: message.content,
-        time: new Date(message.created_at).toLocaleTimeString(),
-        confidence: message.metadata?.confidence
-            ? `${Math.round(message.metadata.confidence * 100)}%`
-            : null,
-        takeover: message.sender_type === "ai" ? false : true,
-    };
+  return {
+    id: message.id,
+    clientId: clientId,
+    name:
+      user?.name ||
+      (message.sender_type === "ai" ? "AI Assistant" : "Customer"),
+    email: user?.email || "unknown@example.com",
+    avatar:
+      user?.avatar ||
+      (message.sender_type === "ai"
+        ? "https://bit.ly/ai-avatar"
+        : "https://bit.ly/dan-abramov"),
+    topic: message.metadata?.intent || "General inquiry",
+    status:
+      message.sender_type === "ai"
+        ? "AI Handling"
+        : message.sender_type === "agent"
+          ? "Agent"
+          : "Customer",
+    statusColor:
+      message.sender_type === "ai"
+        ? "blue.600"
+        : message.sender_type === "agent"
+          ? "green.600"
+          : "gray.600",
+    lastMessage: message.content,
+    time: new Date(message.created_at).toLocaleTimeString(),
+    confidence: message.metadata?.confidence
+      ? `${Math.round(message.metadata.confidence * 100)}%`
+      : null,
+    takeover: message.sender_type === "ai" ? false : true,
+  };
 };
 
 /**
  * Emit mapped message for frontend
  */
 export const emitMappedMessage = (roomId, clientId, message, user = null) => {
-    const mapped = mapMessageToFrontend(message, clientId, user);
-    emitToRoom(roomId, clientId, 'mapped_message', mapped);
+  const mapped = mapMessageToFrontend(message, clientId, user);
+  emitToRoom(roomId, clientId, "mapped_message", mapped);
 };
 
 /**
  * Emit typing indicator
  */
 export const emitTyping = (roomId, clientId, senderType, isTyping) => {
-    emitToRoom(roomId, clientId, 'typing', {
-        sender_type: senderType,
-        is_typing: isTyping
-    });
+  emitToRoom(roomId, clientId, "typing", {
+    sender_type: senderType,
+    is_typing: isTyping,
+  });
 };
 
 /**
  * Emit session update
  */
 export const emitSessionUpdate = (roomId, clientId, update) => {
-    emitToRoom(roomId, clientId, 'session_update', update);
+  emitToRoom(roomId, clientId, "session_update", update);
 };
 
 export default {
-    initializeSocket,
-    getIO,
-    emitToRoom,
-    emitNewMessage,
-    emitTyping,
-    emitSessionUpdate
+  initializeSocket,
+  getIO,
+  emitToRoom,
+  emitNewMessage,
+  emitTyping,
+  emitSessionUpdate,
 };

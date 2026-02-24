@@ -8,6 +8,7 @@ import {
   generateRefreshToken,
 } from "#utils/tokenUtils.js";
 import agentClient from "../src/integrations/crmClient.js";
+import { emitNewMessage, getIO } from "#socket/index.js";
 
 /**
  * Generate unique session token
@@ -325,6 +326,23 @@ export const saveAgentMessage = asyncHandler(async (req, res) => {
     sender_type || "agent",
     metadata || null,
   );
+
+  // ✅ Emit to customer widget so they see the agent reply
+  emitNewMessage(room_id, client_id, saved);
+
+  // ✅ Notify supervisor dashboard
+  const io = getIO();
+  io.of("/widget")
+    .to(`supervisor_${client_id}`)
+    .emit("new_conversation_message", {
+      id: saved.id,
+      conversation_id: room_id,
+      client_id,
+      content,
+      sender_type: sender_type || "agent",
+      created_at: saved.created_at,
+      metadata: saved.metadata,
+    });
 
   res.json({ success: true, data: saved });
 });

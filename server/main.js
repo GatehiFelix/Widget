@@ -73,6 +73,13 @@ agentClient
     }
   });
 
+  setTimeout(() => {
+  console.log("AgentClient isReady:", agentClient.isReady);
+  console.log("AgentClient socket connected:", agentClient._socket?.connected);
+  console.log("AgentClient baseUrl:", agentClient.baseUrl);
+  console.log("AgentClient apiKey:", agentClient.apiKey);
+}, 3000);
+
 app.use((req, res, next) => {
   req.ragApp = ragApp;
   next();

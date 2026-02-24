@@ -4,6 +4,7 @@ import {
     startSession,
     sendMessage,
     getChatHistory,
+    saveAgentMessage,
     getConversationsSummaries,
     escalateToAgent,
     sendAgentMessage,
@@ -22,5 +23,6 @@ router.post('/close', closeSession);
 
 // Agent endpoints
 router.post('/agent/message', sendAgentMessage); 
+router.post('/agent-message', saveAgentMessage);
 
 export default router;

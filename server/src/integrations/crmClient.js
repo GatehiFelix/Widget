@@ -121,9 +121,7 @@ class AgentBackendClient {
     this._emit("leave_widget_conversation", { conversation_id: conversationId });
   }
 
-  // ─────────────────────────────────────────────
   // SOCKET METHODS (with acknowledgement)
-  // ─────────────────────────────────────────────
 
   /**
    * Emit with acknowledgement — use for critical events where
@@ -225,22 +223,22 @@ const agentClient = new AgentBackendClient();
 export default agentClient;
 
 
-agentClient.on("widget_message", (messageData) => {
-  try {
-    const io = getIO();
-    if (messageData.conversation_id) {
-      // Forward to all clients in the correct widget room/namespace
-      io.of("/widget")
-        .to(`widget_conv_${messageData.conversation_id}`)
-        .emit("widget_message_received", messageData);
-      console.log(`[CRMClient] Forwarded widget_message to widget_conv_${messageData.conversation_id}`);
-      if (typeof logger !== 'undefined') {
-        logger.info(`[CRMClient] Forwarded widget_message to widget_conv_${messageData.conversation_id}`);
-      }
-    }
-  } catch (err) {
-    if (typeof logger !== 'undefined') {
-      logger.error(`[CRMClient] Error forwarding widget_message: ${err.message}`);
-    }
-  }
-});
+// agentClient.on("widget_message", (messageData) => {
+//   try {
+//     const io = getIO();
+//     if (messageData.conversation_id) {
+//       // Forward to all clients in the correct widget room/namespace
+//       io.of("/widget")
+//         .to(`widget_conv_${messageData.conversation_id}`)
+//         .emit("widget_message_received", messageData);
+//       console.log(`[CRMClient] Forwarded widget_message to widget_conv_${messageData.conversation_id}`);
+//       if (typeof logger !== 'undefined') {
+//         logger.info(`[CRMClient] Forwarded widget_message to widget_conv_${messageData.conversation_id}`);
+//       }
+//     }
+//   } catch (err) {
+//     if (typeof logger !== 'undefined') {
+//       logger.error(`[CRMClient] Error forwarding widget_message: ${err.message}`);
+//     }
+//   }
+// });
