@@ -8,7 +8,10 @@ import {
     getConversationsSummaries,
     escalateToAgent,
     sendAgentMessage,
-    closeSession
+    closeSession,
+    getSupervisorConversations,
+    getAgentConversations,
+    closeAgentConversation,
 } from '#controllers/chatController.js';
 
 const router = Router();
@@ -24,5 +27,8 @@ router.post('/close', closeSession);
 // Agent endpoints
 router.post('/agent/message', sendAgentMessage); 
 router.post('/agent-message', saveAgentMessage);
+router.get('/supervisor/conversations', getSupervisorConversations);
+router.get('/agent/conversations', getAgentConversations);
+router.post('/agent/conversations/close', closeAgentConversation);
 
 export default router;

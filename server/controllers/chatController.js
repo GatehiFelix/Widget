@@ -346,3 +346,63 @@ export const saveAgentMessage = asyncHandler(async (req, res) => {
 
   res.json({ success: true, data: saved });
 });
+
+
+/**
+ * @desc  Get supervisor conversation list
+ * @route GET /api/chat/supervisor/conversations?clientId=4&range=daily
+ */
+export const getSupervisorConversations = asyncHandler(async (req, res) => {
+  const { clientId, range } = req.query;
+
+  if (!clientId) {
+    return res.status(400).json({ success: false, error: 'clientId is required' });
+  }
+
+  const data = await ChatService.getSupervisorConversations(
+    parseInt(clientId),
+    range || 'daily',
+  );
+
+  res.json({ success: true, data });
+});
+
+
+/**
+ * @desc Get agent conversation list
+ * @route GET /api/chat/agent/conversations?clientId=4&agentEmail=felix@example.com&range=daily
+ */
+
+export const getAgentConversations = asyncHandler(async (req, res) => {
+  const { clientId, agentEmail, range } = req.query;
+
+  if (!clientId || !agentEmail) {
+    return res.status(400).json({ success: false, error: 'clientId and agentEmail are required' });
+  }
+
+  const data = await ChatService.getAgentConversations(
+    parseInt(clientId),
+    agentEmail,
+    range || 'daily',
+  );
+
+  res.json({ success: true, data });
+});
+
+
+/**
+ * @desc Close agent conversation (takeover=false, closed_at=now)
+ * @route POST /api/chat/agent/conversations/close
+ */
+
+export const closeAgentConversation = asyncHandler(async (req, res) => {
+  const { roomId, clientId } = req.body;
+
+  if (!roomId || !clientId) {
+    return res.status(400).json({ success: false, error: 'roomId and clientId are required' });
+  }
+
+  const result = await ChatService.closeAgentConversation(roomId, clientId);
+
+  res.json({ success: true, data: result });
+})

@@ -29,7 +29,12 @@ const getQueryService = async () => {
 /**
  * Start or resume a chat session
  */
-const startSession = async (clientId, sessionToken, visitorId, roomId = null) => {
+const startSession = async (
+  clientId,
+  sessionToken,
+  visitorId,
+  roomId = null,
+) => {
   if (!clientId || !sessionToken) {
     throw new Error("clientId and sessionToken are required");
   }
@@ -40,7 +45,6 @@ const startSession = async (clientId, sessionToken, visitorId, roomId = null) =>
     visitorId,
     roomId || null,
   );
-
 
   emitTyping(session.room.id, clientId, "ai", false);
 
@@ -108,8 +112,12 @@ const sendMessageToAgent = async (message, room = null, client = null) => {
       client ? Promise.resolve(client) : Client.findByPk(message.client_id),
     ]);
     console.log("Resolved room and client for agent message:", {
-      room: resolvedRoom ? { id: resolvedRoom.id, topic: resolvedRoom.topic } : null,
-      client: resolvedClient ? { id: resolvedClient.id, name: resolvedClient.name } : null,
+      room: resolvedRoom
+        ? { id: resolvedRoom.id, topic: resolvedRoom.topic }
+        : null,
+      client: resolvedClient
+        ? { id: resolvedClient.id, name: resolvedClient.name }
+        : null,
     });
 
     const enriched = {
@@ -120,7 +128,7 @@ const sendMessageToAgent = async (message, room = null, client = null) => {
       sender_type: message.sender_type,
       created_at: message.created_at,
       metadata: message.metadata,
-      name: resolvedClient?.name || "Unknown",
+      name: resolvedRoom?.customer_name || "Unknown",
       email: resolvedRoom?.customer_email || "N/A",
       topic: resolvedRoom?.topic || "General Inquiry",
       status:
@@ -144,10 +152,13 @@ const sendMessageToAgent = async (message, room = null, client = null) => {
     };
     console.log("Enriched message payload for agent backend:", enriched);
 
-    // agentClient.joinConversation(resolvedRoom.id, resolvedClient.id); 
+    // agentClient.joinConversation(resolvedRoom.id, resolvedClient.id);
     agentClient.sendMessage(enriched);
   } catch (err) {
-    logger.error("Failed to send message to agent backend via socket:", err.message);
+    logger.error(
+      "Failed to send message to agent backend via socket:",
+      err.message,
+    );
   }
 };
 
@@ -160,17 +171,23 @@ const processMessage = async (clientId, roomId, content) => {
   }
 
   // 1. Save and emit customer message
-  const customerMessage = await saveMessage(roomId, clientId, content, "customer");
+  const customerMessage = await saveMessage(
+    roomId,
+    clientId,
+    content,
+    "customer",
+  );
   emitNewMessage(roomId, clientId, customerMessage);
   logger.info(`Customer message saved: ${customerMessage.id}`);
 
   // 2. Fetch context, history, room and client in parallel
-  const [conversationHistory, context, chatRoom, resolvedClient] = await Promise.all([
-    getRecentMessages(roomId),
-    SessionContextService.getOrCreateContext(roomId, clientId),
-    ChatRoom.findOne({ where: { id: roomId, client_id: clientId } }),
-    Client.findByPk(clientId),
-  ]);
+  const [conversationHistory, context, chatRoom, resolvedClient] =
+    await Promise.all([
+      getRecentMessages(roomId),
+      SessionContextService.getOrCreateContext(roomId, clientId),
+      ChatRoom.findOne({ where: { id: roomId, client_id: clientId } }),
+      Client.findByPk(clientId),
+    ]);
 
   if (chatRoom?.takeover) {
     await sendMessageToAgent(customerMessage, chatRoom, resolvedClient);
@@ -192,7 +209,6 @@ const processMessage = async (clientId, roomId, content) => {
     collectedEntities: context?.collected_entities || {},
   });
 
-
   const pickAgent = async () => {
     const agents = await fetchAgents(clientId);
     console.log("Available agents:", agents);
@@ -200,18 +216,18 @@ const processMessage = async (clientId, roomId, content) => {
   };
 
   const assignAgent = async (agent) => {
-     const isExternal = agent.source === 'external' || !agent.isLocal; // whatever the agent object looks like
-    
+    const isExternal = agent.source === "external" || !agent.isLocal; // whatever the agent object looks like
+
     const updatePayload = {
-        assigned_agent_email: agent.email,
-        agent_source: isExternal ? "external" : "local",
-        takeover: true,
-        external_agent_id: isExternal ? Number(agent.id) : null,
-        assigned_agent_id: isExternal ? null : Number(agent.id),
+      assigned_agent_email: agent.email,
+      agent_source: isExternal ? "external" : "local",
+      takeover: true,
+      external_agent_id: isExternal ? Number(agent.id) : null,
+      assigned_agent_id: isExternal ? null : Number(agent.id),
     };
 
     await ChatRoom.update(updatePayload, {
-        where: { id: roomId, client_id: clientId },
+      where: { id: roomId, client_id: clientId },
     });
     const updatedEntities = {
       ...context.collected_entities,
@@ -219,7 +235,11 @@ const processMessage = async (clientId, roomId, content) => {
       assignedAgentName: agent.name,
     };
 
-    await SessionContextService.updateEntities(roomId, clientId, updatedEntities);
+    await SessionContextService.updateEntities(
+      roomId,
+      clientId,
+      updatedEntities,
+    );
     context.collected_entities = updatedEntities;
 
     const msg = await saveMessage(
@@ -241,7 +261,6 @@ const processMessage = async (clientId, roomId, content) => {
     return msg;
   };
 
-
   if (handoverResult?.shouldHandover) {
     if (!handoverResult.immediate) {
       // ASSISTED — fall through intentionally so AI collects customer identity first.
@@ -251,9 +270,12 @@ const processMessage = async (clientId, roomId, content) => {
         pendingHandover: true,
         handoverReason: handoverResult.reason,
       };
-      await SessionContextService.updateEntities(roomId, clientId, updatedEntities);
+      await SessionContextService.updateEntities(
+        roomId,
+        clientId,
+        updatedEntities,
+      );
       context.collected_entities = updatedEntities;
-
     } else {
       // IMMEDIATE — hand over right now
       logger.info(`Immediate handover triggered: ${handoverResult.reason}`);
@@ -261,7 +283,8 @@ const processMessage = async (clientId, roomId, content) => {
       if (chatRoom?.assigned_agent_id) {
         // Agent already assigned — just remind the customer
         const agentName =
-          context.collected_entities?.assignedAgentName || "your assigned agent";
+          context.collected_entities?.assignedAgentName ||
+          "your assigned agent";
 
         const msg = await saveMessage(
           roomId,
@@ -314,42 +337,60 @@ const processMessage = async (clientId, roomId, content) => {
     // 4. Init query service
     const qs = await getQueryService();
 
-    // 5. LLM-powered entity extraction
-    const extractedEntities = await qs.extractEntities(
-      content,
-      context.collected_entities || {},
-    );
+    // 5. LLM-powered entity extraction + intent in parallel
+const [extractedEntities, detectedIntent] = await Promise.all([
+  qs.extractEntities(content, context.collected_entities || {}),
+  qs.extractIntent(content),
+]);
 
-    if (Object.keys(extractedEntities).length > 0) {
-      logger.info(`Extracted entities: ${JSON.stringify(extractedEntities)}`);
-      context.collected_entities = {
-        ...context.collected_entities,
-        ...extractedEntities,
-      };
+// Update topic from detected intent
+if (detectedIntent) {
+  const detectedTopic = detectedIntent
+    .split(" ")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+  await ChatRoom.update(
+    { topic: detectedTopic },
+    { where: { id: roomId, client_id: clientId } },
+  );
+  Object.assign(chatRoom, { topic: detectedTopic });
+}
 
-      await SessionContextService.updateEntities(roomId, clientId, context.collected_entities);
+// Update entities
+if (Object.keys(extractedEntities).length > 0) {
+  logger.info(`Extracted entities: ${JSON.stringify(extractedEntities)}`);
+  context.collected_entities = {
+    ...context.collected_entities,
+    ...extractedEntities,
+  };
+  await SessionContextService.updateEntities(roomId, clientId, context.collected_entities);
 
-      const roomUpdates = {};
-      if (extractedEntities.email) roomUpdates.customer_email = extractedEntities.email;
-      if (extractedEntities.name) roomUpdates.customer_name = extractedEntities.name;
-      if (Object.keys(roomUpdates).length > 0) {
-        await ChatRoom.update(roomUpdates, {
-          where: { id: roomId, client_id: clientId },
-        });
-      }
-    }
+  const roomUpdates = {};
+  if (extractedEntities.email) roomUpdates.customer_email = extractedEntities.email;
+  if (extractedEntities.name) roomUpdates.customer_name = extractedEntities.name;
+  if (Object.keys(roomUpdates).length > 0) {
+    await ChatRoom.update(roomUpdates, { where: { id: roomId, client_id: clientId } });
+    Object.assign(chatRoom, roomUpdates); // ✅ refresh local ref
+  }
+}
 
     // 5b. Pending handover unblocked — identity now available
     if (
       context.collected_entities?.pendingHandover &&
-      (extractedEntities.email || extractedEntities.name || extractedEntities.phone)
+      (extractedEntities.email ||
+        extractedEntities.name ||
+        extractedEntities.phone)
     ) {
       const handoverReason = context.collected_entities.handoverReason;
 
       delete context.collected_entities.pendingHandover;
       delete context.collected_entities.handoverReason;
 
-      await SessionContextService.updateEntities(roomId, clientId, context.collected_entities);
+      await SessionContextService.updateEntities(
+        roomId,
+        clientId,
+        context.collected_entities,
+      );
 
       const agent = await pickAgent();
       if (agent) {
@@ -404,21 +445,7 @@ const processMessage = async (clientId, roomId, content) => {
       queryDuration,
     });
 
-    const intentToUse = ragResponse?.intent 
 
-if (intentToUse) {
-  // Capitalize each word for display e.g. "account access" → "Account Access"
-  const detectedTopic = intentToUse
-    .split(' ')
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
-
-  await ChatRoom.update(
-    { topic: detectedTopic },
-    { where: { id: roomId, client_id: clientId } }
-  );
-  logger.info(`Room ${roomId} topic updated to: ${detectedTopic}`);
-}
 
     emitNewMessage(roomId, clientId, aiMessage);
     logger.info(`AI message saved: ${aiMessage.id}`);
@@ -429,13 +456,12 @@ if (intentToUse) {
     // 9. Merge any entities the RAG pipeline extracted
     if (ragResponse?.extractedEntities) {
       await SessionContextService.updateEntities(roomId, clientId, {
-    ...context.collected_entities,
-    ...ragResponse.extractedEntities,
-});
+        ...context.collected_entities,
+        ...ragResponse.extractedEntities,
+      });
     }
 
     return { customerMessage, aiMessage, sources: ragResponse?.sources || [] };
-
   } catch (error) {
     logger.error("Error processing message:", error);
     emitTyping(roomId, clientId, "ai", false);
@@ -454,7 +480,11 @@ if (intentToUse) {
 /**
  * Get chat history
  */
-const getChatHistory = async (roomId, clientId, limit = CONFIG.MESSAGE_LIMIT) => {
+const getChatHistory = async (
+  roomId,
+  clientId,
+  limit = CONFIG.MESSAGE_LIMIT,
+) => {
   if (!roomId || !clientId) {
     throw new Error("roomId and clientId are required");
   }
@@ -553,7 +583,14 @@ const sendAgentMessage = async (roomId, clientId, agentId, content) => {
     throw new Error("roomId, clientId, agentId, and content are required");
   }
 
-  const message = await saveMessage(roomId, clientId, content, "agent", null, agentId);
+  const message = await saveMessage(
+    roomId,
+    clientId,
+    content,
+    "agent",
+    null,
+    agentId,
+  );
   emitNewMessage(roomId, clientId, message);
   return message;
 };
@@ -591,6 +628,160 @@ const closeSession = async (roomId, clientId) => {
 };
 
 
+/**
+ * Get active conversations for supervisor dashboard
+ * @param {number} clientId
+ * @param {'daily'|'weekly'} range - defaults to 'daily'
+ */
+const getSupervisorConversations = async (clientId, range = 'daily') => {
+  if (!clientId) throw new Error('clientId is required');
+
+  const now = new Date();
+  const cutoff = new Date(now);
+
+  if (range === 'weekly') {
+    cutoff.setDate(now.getDate() - 7);
+  } else {
+    // daily — last 24 hours
+    cutoff.setDate(now.getDate() - 1);
+  }
+
+  const rooms = await ChatRoom.findAll({
+    where: {
+      client_id: clientId,
+      last_activity_at: { [Op.gte]: cutoff },
+    },
+    order: [['last_activity_at', 'DESC']],
+  });
+
+  return Promise.all(
+    rooms.map(async (room) => {
+      const lastMessage = await Message.findOne({
+        where: { room_id: room.id, client_id: clientId },
+        order: [['created_at', 'DESC']],
+      });
+
+      const status = room.takeover ? 'Agent Handling' : 'AI Handling';
+      const statusColor = room.takeover ? 'orange.600' : 'blue.600';
+
+      return {
+        id: room.id,
+        roomId: room.id,
+        clientId: room.client_id,
+        name: room.customer_name || 'Customer',        // from ChatRoom model
+        email: room.customer_email || 'N/A',
+        topic: room.topic || 'General Inquiry',
+        status,
+        statusColor,
+        lastMessage: lastMessage?.content || '',
+        time: lastMessage?.created_at || room.last_activity_at,
+        confidence: lastMessage?.sender_type === 'ai' && lastMessage?.metadata?.confidence
+          ? `${lastMessage.metadata.confidence}%`
+          : '—',
+        takeover: !!room.takeover,
+        assignedAgent: room.assigned_agent_email || null,
+        createdAt: room.created_at,          // needed for the 2-day disable logic
+      };
+    }),
+  );
+};
+
+/**
+ * get all agent conversations whether open or closed
+ * @param {number} clientId
+ * @param {'daily'|'weekly'} range - defaults to 'daily'
+ */
+
+const getAgentConversations = async (clientId, agentEmail, range = 'daily') => {
+  if( (!clientId && !agentEmail) ) throw new Error('clientId and agentEmail are required');
+
+  const now = new Date();
+  const cutoff = new Date(now);
+
+  if(range === "weekly") {
+    cutoff.setDate(now.getDate() - 7);
+  } else {
+    cutoff.setDate(now.getDate() - 1);
+  }
+
+  const rooms = await ChatRoom.findAll({
+    where: {
+      client_id: clientId,
+      assigned_agent_email: agentEmail,
+      last_activity_at: { [Op.gte]: cutoff },
+    },
+    order: [['last_activity_at', 'DESC']],
+  });
+
+  return Promise.all(
+    rooms.map(async (room) => {
+      const lastMessage = await Message.findOne({
+        where: { room_id: room.id, client_id: clientId },
+        order: [['created_at', 'DESC']],
+      });
+
+      const status = room.takeover ? 'Agent Handling' : 'AI Handling';
+      const statusColor = room.takeover ? 'orange.600' : 'blue.600';
+
+      return {
+        id: room.id,
+        roomId: room.id,
+        clientId: room.client_id,
+        name: room.customer_name || 'Customer',        // from ChatRoom model
+        email: room.customer_email || 'N/A',
+        topic: room.topic || 'General Inquiry',
+        status,
+        statusColor,
+        lastMessage: lastMessage?.content || '',
+        time: lastMessage?.created_at || room.last_activity_at,
+        confidence: lastMessage?.sender_type === 'ai' && lastMessage?.metadata?.confidence
+          ? `${lastMessage.metadata.confidence}%`
+          : '—',
+        takeover: !!room.takeover,
+        assignedAgent: room.assigned_agent_email || null,
+        createdAt: room.created_at,       
+      }
+    })
+  )
+}
+
+
+/**
+ * update agent assigned conversation to closed
+ * @param {number} roomId
+ * @param {number} clientId
+ */
+
+const closeAgentConversation = async (roomId, client_id) => {
+  if (!roomId || !client_id) throw new Error('roomId and clientId are required');
+
+  await ChatRoom.update(
+    {
+      status: 'inactive',
+      takeover: false,
+      closed_at: new Date(),
+    },
+    { where: { id: roomId, client_id } }
+  );
+
+  const room = await ChatRoom.findOne({ where: { id: roomId, client_id } });
+  if (!room) throw new Error('Chat room not found');
+
+  const message = await saveMessage(
+    roomId,
+    client_id,
+    'This conversation has been closed by the agent. Thank you for reaching out!',
+    'system',
+  );
+
+  // Notifies the customer widget so they see the closing message in real time
+  emitNewMessage(roomId, client_id, message);
+
+  return { closed: true, roomId, message };
+};
+
+
+
 export const ChatService = {
   startSession,
   getChatHistory,
@@ -601,4 +792,7 @@ export const ChatService = {
   sendAgentMessage,
   closeSession,
   getRecentMessages,
+  getSupervisorConversations,
+  getAgentConversations,
+  closeAgentConversation,
 };
