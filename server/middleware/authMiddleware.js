@@ -74,10 +74,8 @@ export const refreshSession = asyncHandler(async (req, res) => {
     res.json({ success: true, accessToken: newAccessToken, refreshToken: newRefreshToken, expiresIn: 15 * 60 });
 });
 
-/**
- * Protect middleware — same idea as yours but uses the access secret
- * and validates the token type
- */
+
+
 export const protect = asyncHandler(async (req, res, next) => {
     const authHeader = req.headers.authorization;
 
@@ -105,6 +103,41 @@ export const protect = asyncHandler(async (req, res, next) => {
         logger.error(`Access token verification failed: ${error.message}`);
 
         // Tell the widget specifically that it needs to refresh
+        const isExpired = error.name === 'TokenExpiredError';
+        res.status(401).json({
+            success: false,
+            error: isExpired ? 'Token expired' : 'Token invalid',
+            code: isExpired ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID',
+        });
+    }
+});
+
+/**
+ * CRM-to-widget authentication
+ * Verifies tokens signed with the shared JWT_SECRET (same on both apps).
+ * Use this on any route the CRM calls server-to-server.
+ */
+export const protectCRM = asyncHandler(async (req, res, next) => {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader?.startsWith('Bearer ')) {
+        return res.status(401).json({ success: false, error: 'No token provided' });
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        req.crm = {
+            clientId: decoded.clientId || decoded.id || null,
+            productId: decoded.productId || null,
+        };
+
+        logger.info(`CRM request authenticated — clientId: ${req.crm.clientId}`);
+        next();
+    } catch (error) {
+        logger.error(`CRM token verification failed: ${error.message}`);
         const isExpired = error.name === 'TokenExpiredError';
         res.status(401).json({
             success: false,

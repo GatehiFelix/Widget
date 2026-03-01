@@ -122,8 +122,11 @@ export const initializeSocket = (httpServer) => {
     socket.on("widget_message", async (data) => {
       logger.info(`[Widget] widget_message received from CRM:`, data);
 
-      const { conversation_id, client_id, content, agentId, sender_type } =
-        data;
+      const { conversation_id, client_id, content, agentId, sender_type } = data;
+
+      if (sender_type === "ai" || sender_type === "customer") {
+        return;
+      }
 
       if (!conversation_id || !client_id || !content) {
         logger.warn("[Widget] widget_message missing required fields");

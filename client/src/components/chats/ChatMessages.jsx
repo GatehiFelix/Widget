@@ -9,7 +9,7 @@ import {
 } from "@slices/chatApiSlice";
 
 import { useDispatch, useSelector } from "react-redux";
-import { setSessionToken, setVisitorId, setTokens } from "@slices/authSlice";
+import { setSessionToken, setVisitorId } from "@slices/authSlice";
 
 const PRODUCT_ID = 6000;
 
@@ -36,9 +36,7 @@ const ChatMessages = ({ roomId, onBack }) => {
   const [startSession] = useStartSessionMutation();
   const [sendMessage] = useSendMessageMutation();
 
-  const { visitorId, accessToken, refreshToken } = useSelector((state) => state.auth);
-
-  
+  const { visitorId } = useSelector((state) => state.auth);
 
   // Scroll to bottom when new messages arrive
   const scrollToBottom = () => {
@@ -49,165 +47,184 @@ const ChatMessages = ({ roomId, onBack }) => {
     scrollToBottom();
   }, [messages]);
 
-  const hasInitialized = useRef(false);
-
   // Real-time socket connection for new messages
   useEffect(() => {
     if (!session || !session.roomId || !session.clientId) return;
 
-    dispatch(setTokens({
-    accessToken: accessToken,
-    refreshToken: refreshToken,
-  }))
-
-    const socketUrl = window.location.origin;
-    
-    // Connect to default namespace — NOT /widget
+    // Use VITE_APP_SOCKET_URL from env
+    const socketUrl = import.meta.env.VITE_APP_SOCKET_URL || "http://localhost:8080";
     const socket = io(socketUrl, {
       transports: ["websocket"],
       withCredentials: true,
     });
+    console.log("socket connected:", socket.connected, "to", socketUrl);
 
-
-    // Join the correct room format RAG uses
-    socket.emit("join_room", { 
-      roomId: session.roomId, 
-      clientId: session.clientId 
+    // Join the chat room
+    socket.emit("join_room", {
+      roomId: session.roomId,
+      clientId: session.clientId,
     });
+    console.log("Joining room:", session.roomId, typeof session.roomId, session.clientId, typeof session.clientId);
 
-    // All messages come through new_message on the default namespace
-    const handleNewMessage = (msg) => {
-      console.log("Received new_message via socket:", msg.id, msg.sender_type, msg.content?.slice(0, 30));
-      console.log("current message count:", messages.length);
+    // Handler for new messages
+      const handleNewMessage = (msg) => {
+      console.log("🔥 new_message received:", msg);
       setMessages((prev) => {
-        // Always remove temp messages when real customer msg arrives
-        const withoutTemp = msg.sender_type === "customer"
-          ? prev.filter((m) => !m.isTemp)
-          : prev;
-
-        // Deduplicate ALL message types by id
-        if (withoutTemp.some((m) => m.id === msg.id)) return withoutTemp;
-
+        if (prev.some((m) => String(m.id) === String(msg.id))) return prev; // ← String() both sides
         return [
-          ...withoutTemp,
+          ...prev,
           {
-            id: msg.id,
+            id: String(msg.id),
             content: msg.content,
-            sender: msg.sender_type === "customer" ? "user"
-                  : msg.sender_type === "ai" ? "agent"
+            sender:
+              msg.sender_type === "customer"
+                ? "user"
+                : msg.sender_type === "ai"
+                  ? "agent"
                   : "system",
             timestamp: new Date(msg.created_at),
-            agentName: msg.sender_type !== "customer" ? "ZuriDesk AI" : undefined,
+            agentName: msg.sender_type === "ai" ? "ZuriDesk AI" : undefined,
           },
         ];
       });
     };
+
+    const handleWidgetMessageReceived = (msg) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [
+          ...prev,
+          {
+            id: String(msg.id),
+            content: msg.content,
+            sender:
+              msg.sender_type === "customer"
+                ? "user"
+                : msg.sender_type === "ai"
+                  ? "agent"
+                  : "system",
+            timestamp: new Date(msg.created_at),
+            agentName: msg.sender_type === "ai" ? "ZuriDesk AI" : undefined,
+          },
+        ];
+      });
+    };
+
+    socket.on("widget_message_received", handleWidgetMessageReceived);
+
     socket.on("new_message", handleNewMessage);
-    
     socket.on("typing", (data) => {
       if (data.sender_type === "ai") {
         setIsAgentTyping(data.is_typing);
       }
     });
 
+    // Cleanup on unmount or session change
     return () => {
-      socket.emit("leave_room", { 
-        roomId: session.roomId, 
-        clientId: session.clientId 
+      socket.emit("leave_room", {
+        roomId: session.roomId,
+        clientId: session.clientId,
       });
       socket.off("new_message", handleNewMessage);
+      socket.off("widget_message_received", handleWidgetMessageReceived);
       socket.off("typing");
       socket.disconnect();
     };
-  }, [session?.roomId, session?.clientId]);
+  }, [session?.roomId, session?.clientId ]);
 
   // Initialize session on mount
   useEffect(() => {
     // Always clear state when starting a new chat
     if (roomId === null) {
-        setSession(null);
-        setMessages([]);
-        setInputValue("");
-        setIsLoading(true);
-        setHasUserSent(false);
-        hasInitialized.current = false; // 👈 reset so new chat can initialize
+      setSession(null);
+      setMessages([]);
+      setInputValue("");
+      setIsLoading(true);
+      setHasUserSent(false);
     }
 
-    if (hasInitialized.current) return;
-    hasInitialized.current = true;
-
     const initSession = async () => {
-        try {
-            let sessionTokenToSend;
+      try {
+        let sessionTokenToSend;
 
-            if (roomId !== null) {
-                sessionTokenToSend = localStorage.getItem("chat_session");
-            } else {
-                sessionTokenToSend = undefined;
-            }
+        if (roomId !== null) {
+          sessionTokenToSend = localStorage.getItem("chat_session");
+        } else {
+          // Don't send sessionToken - backend will generate a new one
+          sessionTokenToSend = undefined;
+        }
 
-            const result = await startSession({
-                productId: PRODUCT_ID,
-                sessionToken: sessionTokenToSend,
-                visitorId: visitorId,
-                roomId: roomId || undefined,
-            }).unwrap();
+        const result = await startSession({
+          productId: PRODUCT_ID,
+          sessionToken: sessionTokenToSend, // undefined for new chats, existing for resume
+          visitorId: visitorId, // Always send the same visitorId
+          roomId: roomId || undefined,
+        }).unwrap();
 
-            if (result.success) {
-                const sessionData = result.data;
-                setSession(sessionData);
+        if (result.success) {
+          const sessionData = result.data;
+          setSession(sessionData);
 
-                localStorage.setItem("chat_session", sessionData.sessionToken);
-                dispatch(setSessionToken(sessionData.sessionToken));
-                dispatch(setTokens({
-                    accessToken: sessionData.accessToken,
-                    refreshToken: sessionData.refreshToken,
-                }));
+          // Save the sessionToken from backend (new or existing)
+          localStorage.setItem("chat_session", sessionData.sessionToken);
+          dispatch(setSessionToken(sessionData.sessionToken));
 
-                if (sessionData.visitorId && sessionData.visitorId !== visitorId) {
-                    localStorage.setItem("chat_visitor_id", sessionData.visitorId);
-                    dispatch(setVisitorId(sessionData.visitorId));
-                }
+          // visitorId should stay the same, but update just in case
+          if (sessionData.visitorId && sessionData.visitorId !== visitorId) {
+            localStorage.setItem("chat_visitor_id", sessionData.visitorId);
+            dispatch(setVisitorId(sessionData.visitorId));
+          }
 
-                setIsLoading(false);
+          setIsLoading(false);
 
-                if (sessionData.messages && sessionData.messages.length > 0) {
-                    setMessages(
-                        sessionData.messages.map((m) => ({
-                            id: m.id,
-                            content: m.content,
-                            sender: m.sender_type === "customer" ? "user"
-                                  : m.sender_type === "ai" ? "agent"
-                                  : "system",
-                            timestamp: new Date(m.created_at),
-                            agentName: m.sender_type === "ai" ? "ZuriDesk AI" : undefined,
-                        })),
-                    );
-                } else {
-                    setMessages([{
-                        id: "welcome",
-                        content: "Hi there! 😊 Welcome to ZuriDesk Live Support!\n\nHow can we help you today?\nTo speak to an agent directly, click on 'speak to an agent'.",
-                        sender: "agent",
-                        timestamp: new Date(),
-                        agentName: "ZuriDesk AI",
-                    }]);
-                }
-            }
-        } catch (error) {
-            console.error("Session init error:", error);
-            setIsLoading(false);
-            setMessages([{
-                id: "error",
-                content: "Sorry, we couldn't connect to the chat service. Please refresh and try again.",
+          if (sessionData.messages && sessionData.messages.length > 0) {
+            // Resuming conversation with existing messages
+            setMessages(
+              sessionData.messages.map((m) => ({
+                id: m.id,
+                content: m.content,
+                sender:
+                  m.sender_type === "customer"
+                    ? "user"
+                    : m.sender_type === "ai"
+                      ? "agent"
+                      : "system",
+                timestamp: new Date(m.created_at),
+                agentName: m.sender_type === "ai" ? "ZuriDesk AI" : undefined,
+              })),
+            );
+          } else {
+            // New conversation - show welcome message
+            setMessages([
+              {
+                id: "welcome",
+                content:
+                  "Hi there! 😊 Welcome to ZuriDesk Live Support!\n\nHow can we help you today?\nTo speak to an agent directly, click on 'speak to an agent'.",
                 sender: "agent",
                 timestamp: new Date(),
-                agentName: "System",
-            }]);
+                agentName: "ZuriDesk AI",
+              },
+            ]);
+          }
         }
+      } catch (error) {
+        console.error("Session init error:", error);
+        setIsLoading(false);
+        setMessages([
+          {
+            id: "error",
+            content:
+              "Sorry, we couldn't connect to the chat service. Please refresh and try again.",
+            sender: "agent",
+            timestamp: new Date(),
+            agentName: "System",
+          },
+        ]);
+      }
     };
 
     initSession();
-}, [roomId]);
+  }, [startSession, roomId, dispatch, visitorId]);
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -220,14 +237,13 @@ const ChatMessages = ({ roomId, onBack }) => {
     if (!inputValue.trim() || !session || isSending) return;
 
     const userMessage = {
-      id: `temp_${Date.now().toString()}`,
+      id: Date.now().toString(),
       content: inputValue,
       sender: "user",
       timestamp: new Date(),
-      isTemp: true
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    // setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
     setIsSending(true);
     setHasUserSent(true);
@@ -237,19 +253,9 @@ const ChatMessages = ({ roomId, onBack }) => {
         clientId: session.clientId,
         roomId: session.roomId,
         content: userMessage.content,
-        accessToken
       }).unwrap();
 
-      // if (result.success && result.data.message) {
-      //   const aiMessage = {
-      //     id: result.data.message.id?.toString() || Date.now().toString(),
-      //     content: result.data.message.content,
-      //     sender: "agent",
-      //     timestamp: new Date(result.data.message.created_at || Date.now()),
-      //     agentName: "ZuriDesk AI",
-      //   };
-      //   setMessages((prev) => [...prev, aiMessage]);
-      // }
+
 
       if (result.success) {
         if (result.data.handover) {
@@ -257,18 +263,6 @@ const ChatMessages = ({ roomId, onBack }) => {
           return;
         }
 
-        // if (result.data.message) {
-        //   setMessages((prev) => [
-        //     ...prev,
-        //     {
-        //       id: result.data.message.id?.toString() || Date.now().toString(),
-        //       content: result.data.message.content,
-        //       sender: "agent",
-        //       timestamp: new Date(result.data.message.created_at || Date.now()),
-        //       agentName: "ZuriDesk AI",
-        //     },
-        //   ]);
-        // }
       }
     } catch (error) {
       console.error("Failed to send message:", error);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { MessageCircle, X, Minimize2 } from "lucide-react";
 import ChatHome from "@/components/chats/ChatHome";
@@ -10,6 +10,8 @@ import ChatHistory from "@components/chats/ChatHistory";
 import { useStartSessionMutation } from "@slices/chatApiSlice";
 
 const ChatWidget = () => {
+  const isEmbedded = window.self !== window.top;
+
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [currentView, setCurrentView] = useState("home");
@@ -20,6 +22,20 @@ const ChatWidget = () => {
   // Track if chat is active (messages or history view)
   const isChatActive = currentView === "messages" || currentView === "history";
 
+  useEffect(() => {
+    if (isEmbedded) {
+      document.body.style.background = "transparent";
+      document.body.style.margin = "0";
+      document.documentElement.style.background = "transparent";
+    }
+    // Cleanup when component unmounts
+    return () => {
+      document.body.style.background = "";
+      document.documentElement.style.background = "";
+    };
+  }, [isEmbedded]);
+
+   
   const handleNavigate = (view) => {
     // When navigating to messages from home, show history first
     if (view === "messages") {
@@ -112,7 +128,12 @@ const ChatWidget = () => {
                     <span className="font-bold text-lg">ZuriDesk</span>
                   </div>
                   <button
-                    onClick={() => setIsOpen(false)}
+                    onClick={() => {
+                      setIsOpen(false);
+                      if (isEmbedded) {
+                        window.parent.postMessage("__widget:close", "*");
+                      }
+                    }}
                     className="p-2 hover:bg-primary-foreground/10 rounded-lg transition-colors"
                   >
                     <X className="w-5 h-5" />

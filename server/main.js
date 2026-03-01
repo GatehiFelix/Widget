@@ -11,6 +11,7 @@ import queryRoutes from "./routes/queryRoutes.js";
 import healthRoutes from "./routes/healthRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
 import supportAgentRoutes from "./routes/supportAgentRoutes.js";
+import widgetScriptRoutes from "./routes/widgetScriptRoutes.js";
 import logger from "./utils/logger.js";
 import agentClient from "./src/integrations/crmClient.js";
 import { ChatService } from "#services/chatService.js";
@@ -91,6 +92,7 @@ app.use("/api/tenants", tenantRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/agents", supportAgentRoutes);
+app.use(widgetScriptRoutes);
 
 app.use((err, req, res, next) => {
   logger.error(err.stack);
