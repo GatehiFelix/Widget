@@ -70,32 +70,39 @@ const initWidgetFromCRM = async (clientId, productId) => {
     throw new Error("clientId and productId are required");
   }
 
-  // Validate the pair — both must match the same record
   const client = await Client.findOne({
-    where: {
-      id: clientId,
-      product_id: productId,
-    },
+    where: { id: clientId, product_id: productId },
   });
 
   if (!client) {
     throw new Error(
-      `No client found for clientId=${clientId} and productId=${productId}. ` +
-        `Ensure the client is registered in the CRM before embedding the widget.`,
+      `No client found for clientId=${clientId} and productId=${productId}.`
     );
+  }
+
+  //  Kill switch check
+  if (client.widget_active === false) {
+    throw new Error(`Widget is disabled for client ${clientId}.`);
   }
 
   const salt = client.widget_salt || "";
   const widgetKey = generateWidgetKey(clientId, productId, salt);
+
+  // Record first activation timestamp
+  if (!client.widget_activated_at) {
+    await client.update({ 
+      widget_activated_at: new Date(),
+      last_active_at: new Date(),
+    });
+  }
 
   const config = {
     widgetKey,
     apiBase: BASE_URL,
     primaryColor: client.widget_primary_color || "#6366f1",
     position: client.widget_position || "bottom-right",
-    welcomeMessage:
-      client.widget_welcome_message ||
-      "Hi there 👋 How can we help you today?",
+    welcomeMessage: client.widget_welcome_message || "Hi there 👋 How can we help you today?",
+    launcherText: client.widget_launcher_text || "Chat with us",
   };
 
   logger.info(
@@ -109,6 +116,9 @@ const initWidgetFromCRM = async (clientId, productId) => {
       id: client.id,
       name: client.name,
       productId: client.product_id,
+      plan: client.plan,            // ✅ now included
+      widgetActive: client.widget_active,
+      activatedAt: client.widget_activated_at,
     },
   };
 };
@@ -151,6 +161,9 @@ const rotateWidgetKey = async (clientId, productId) => {
 
   return { widgetKey };
 };
+
+
+
 
 export const WidgetScriptService = {
   initWidgetFromCRM,  

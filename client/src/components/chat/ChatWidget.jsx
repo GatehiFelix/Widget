@@ -28,13 +28,23 @@ const ChatWidget = () => {
       document.body.style.margin = "0";
       document.documentElement.style.background = "transparent";
     }
-    // Cleanup when component unmounts
-    return () => {
-      document.body.style.background = "";
-      document.documentElement.style.background = "";
-    };
   }, [isEmbedded]);
 
+
+    const handleOpen = () => {
+    setIsOpen(true);
+    setIsMinimized(false);
+    if (isEmbedded) {
+      window.parent.postMessage("__widget:open", "*");
+    }
+  };
+
+  const handleClose = () => {
+    setIsOpen(false);
+    if (isEmbedded) {
+      window.parent.postMessage("__widget:close", "*");
+    }
+  };
    
   const handleNavigate = (view) => {
     // When navigating to messages from home, show history first
@@ -128,12 +138,7 @@ const ChatWidget = () => {
                     <span className="font-bold text-lg">ZuriDesk</span>
                   </div>
                   <button
-                    onClick={() => {
-                      setIsOpen(false);
-                      if (isEmbedded) {
-                        window.parent.postMessage("__widget:close", "*");
-                      }
-                    }}
+                    onClick={handleClose}
                     className="p-2 hover:bg-primary-foreground/10 rounded-lg transition-colors"
                   >
                     <X className="w-5 h-5" />
@@ -191,9 +196,12 @@ const ChatWidget = () => {
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => {
-          setIsOpen(!isOpen);
-          setIsMinimized(false);
-        }}
+            if (isOpen) {
+              handleClose();
+            } else {
+              handleOpen();
+            }
+          }}
         className="w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg hover:shadow-xl transition-shadow flex items-center justify-center relative"
       >
         <AnimatePresence mode="wait">

@@ -142,18 +142,18 @@ const buildLoaderScript = (config) => {
   iframe.src = "${widgetAppUrl}/widget?key=" + encodeURIComponent("${widgetKey}");
 
   iframe.style.cssText = [
-    "position:fixed",
-    "${isLeft ? 'left:24px' : 'right:24px'}",
-    "bottom:24px",
-    "width:70px",
-    "height:70px",
-    "border:none",
-    "background:transparent",
-    "z-index:2147483647",
-    "pointer-events:auto",
-    "overflow:visible",
-    "transition:width 0.3s ease, height 0.3s ease",
-  ].join(";");
+  "position:fixed",
+  "right:0px",      
+  "bottom:0px",     
+  "width:80px",     
+  "height:80px",    
+  "border:none",
+  "background:transparent",
+  "z-index:2147483647",
+  "pointer-events:auto",
+  "overflow:visible",
+  "transition:width 0.3s ease, height 0.3s ease",
+].join(";");
 
   iframe.setAttribute("allowtransparency", "true");
   iframe.setAttribute("allow", "microphone");
@@ -166,9 +166,9 @@ const buildLoaderScript = (config) => {
 
     if (e.data === "__widget:open") {
       iframe.style.width = "${isLeft ? '500px' : '500px'}";
-      iframe.style.height = "700px";
-      iframe.style.bottom = "24px";
-      iframe.style.${isLeft ? 'left' : 'right'} = "24px";
+      iframe.style.height = "1000px";
+      iframe.style.bottom = "0px";
+      iframe.style.right = "24px";
     }
 
     if (e.data === "__widget:close") {
