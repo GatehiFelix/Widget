@@ -4,6 +4,7 @@ import {
   getWidgetSnippet,
   rotateWidgetKey,
 } from "#controllers/widgetScriptController.js";
+import { syncClientFromCRM } from "#controllers/clientController.js";
 import { protectCRM } from "#middleware/authMiddleware.js";
 
 const router = Router();
@@ -19,7 +20,7 @@ router.get(
   protectCRM,
   getWidgetSnippet,
 );
-
+router.post("/api/clients/sync", protectCRM, syncClientFromCRM);
 // Invalidates the current widget key for a client and issues a new one.
 // productId is sent in the request body.
 router.post(

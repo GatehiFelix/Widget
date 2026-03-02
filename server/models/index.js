@@ -5,6 +5,7 @@ const sequelize = await connectDB();
 
 // Import models AFTER connection established
 import Client from './clients.js';
+import WidgetConfig from './widgetConfig.js';
 import User from './users.js';
 import ChatRoom from './chatrooms.js';
 import Message from './messages.js';
@@ -15,6 +16,9 @@ import RefreshToken from './refreshTokens.js';
 Client.hasMany(User, { foreignKey: 'client_id' });
 Client.hasMany(ChatRoom, { foreignKey: 'client_id' });
 Client.hasMany(Message, { foreignKey: 'client_id' });
+Client.hasOne(WidgetConfig, { foreignKey: 'client_id', onDelete: 'CASCADE' });
+
+WidgetConfig.belongsTo(Client, { foreignKey: 'client_id'})
 
 // User associations
 User.belongsTo(Client, { foreignKey: 'client_id' });
@@ -48,7 +52,9 @@ async function syncModels(options = {}) {
         // Only sync structure, don't alter (prevents duplicate indexes)
         // Use force: true only for fresh start, or manually run migrations
         if (force) {
-            await sequelize.sync({ force: true });
+            await sequelize.sync({ force: true, alter });
+        }  else if(alter) {
+            await sequelize.sync();
         } else {
             // Just validate, don't alter
             await sequelize.sync();
@@ -69,5 +75,6 @@ export {
     Message,
     SessionContext,
     RefreshToken,
+    WidgetConfig,
     syncModels
 };

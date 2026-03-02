@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express from 'express';
 
 import {
     startSession,
@@ -14,7 +14,7 @@ import {
     closeAgentConversation,
 } from '#controllers/chatController.js';
 
-const router = Router();
+const router = express.Router();
 
 // Customer endpoints
 router.post('/session', startSession);          

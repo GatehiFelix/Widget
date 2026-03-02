@@ -139,7 +139,7 @@ const buildLoaderScript = (config) => {
 
   var iframe = document.createElement("iframe");
   iframe.id = "__support-widget-root";
-  iframe.src = "${widgetAppUrl}/widget?key=" + encodeURIComponent("${widgetKey}");
+  iframe.src = "${widgetAppUrl}/widget?key=" + encodeURIComponent("${widgetKey}") + "&clientId=${clientId}" + "&productId=${productId}";
 
   iframe.style.cssText = [
   "position:fixed",

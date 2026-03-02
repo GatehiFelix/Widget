@@ -10,8 +10,8 @@ import {
 
 import { useDispatch, useSelector } from "react-redux";
 import { setSessionToken, setVisitorId } from "@slices/authSlice";
+import useWidgetConfig from "@hooks/useWidgetConfig";
 
-const PRODUCT_ID = 6000;
 
 const quickReplies = [
   "I need help with my account",
@@ -23,6 +23,8 @@ const quickReplies = [
 
 const ChatMessages = ({ roomId, onBack }) => {
   const dispatch = useDispatch();
+
+  const { productId, clientId: widgetClientId } = useWidgetConfig();
 
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState("");
@@ -143,6 +145,11 @@ const ChatMessages = ({ roomId, onBack }) => {
       setHasUserSent(false);
     }
 
+    if(!productId) {
+      console.error("widget not configured properly: missing productId");
+      return;
+    }
+
     const initSession = async () => {
       try {
         let sessionTokenToSend;
@@ -155,7 +162,7 @@ const ChatMessages = ({ roomId, onBack }) => {
         }
 
         const result = await startSession({
-          productId: PRODUCT_ID,
+          productId,
           sessionToken: sessionTokenToSend, // undefined for new chats, existing for resume
           visitorId: visitorId, // Always send the same visitorId
           roomId: roomId || undefined,
@@ -224,7 +231,7 @@ const ChatMessages = ({ roomId, onBack }) => {
     };
 
     initSession();
-  }, [startSession, roomId, dispatch, visitorId]);
+  }, [startSession, roomId, dispatch, visitorId, productId]);
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {

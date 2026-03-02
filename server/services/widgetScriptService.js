@@ -70,8 +70,10 @@ const initWidgetFromCRM = async (clientId, productId) => {
     throw new Error("clientId and productId are required");
   }
 
+  //  Fetch client WITH widget config in one query
   const client = await Client.findOne({
     where: { id: clientId, product_id: productId },
+    include: [{ model: WidgetConfig }],
   });
 
   if (!client) {
@@ -80,34 +82,35 @@ const initWidgetFromCRM = async (clientId, productId) => {
     );
   }
 
-  //  Kill switch check
-  if (client.widget_active === false) {
+  const widget = client.widgetConfig;
+
+  if (!widget) {
+    throw new Error(
+      `No widget config found for clientId=${clientId}. Sync the client first.`
+    );
+  }
+
+  if (widget.widget_active === false) {
     throw new Error(`Widget is disabled for client ${clientId}.`);
   }
 
-  const salt = client.widget_salt || "";
+  const salt = widget.widget_salt || "";
   const widgetKey = generateWidgetKey(clientId, productId, salt);
 
-  // Record first activation timestamp
-  if (!client.widget_activated_at) {
-    await client.update({ 
-      widget_activated_at: new Date(),
-      last_active_at: new Date(),
-    });
+  // Record first activation
+  if (!widget.widget_activated_at) {
+    await widget.update({ widget_activated_at: new Date() });
+    await client.update({ last_active_at: new Date() });
   }
 
   const config = {
     widgetKey,
     apiBase: BASE_URL,
-    primaryColor: client.widget_primary_color || "#6366f1",
-    position: client.widget_position || "bottom-right",
-    welcomeMessage: client.widget_welcome_message || "Hi there 👋 How can we help you today?",
-    launcherText: client.widget_launcher_text || "Chat with us",
+    primaryColor: widget.primary_color,
+    position: widget.position,
+    welcomeMessage: widget.welcome_message,
+    launcherText: widget.launcher_text,
   };
-
-  logger.info(
-    `Widget initialised — clientId: ${clientId}, productId: ${productId}, client: "${client.name}"`,
-  );
 
   return {
     widgetKey,
@@ -116,9 +119,9 @@ const initWidgetFromCRM = async (clientId, productId) => {
       id: client.id,
       name: client.name,
       productId: client.product_id,
-      plan: client.plan,            // ✅ now included
-      widgetActive: client.widget_active,
-      activatedAt: client.widget_activated_at,
+      plan: client.plan,
+      widgetActive: widget.widget_active,
+      activatedAt: widget.widget_activated_at,
     },
   };
 };
