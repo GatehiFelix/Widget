@@ -1,9 +1,7 @@
+import asyncHandler from "express-async-handler";
 import { WidgetScriptService } from "#services/widgetScriptService.js";
 import logger from "#utils/logger.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Widget loader — public, called on every page load from the customer's website
-// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * GET /widget/loader.js?clientId=X&productId=Y
@@ -30,7 +28,11 @@ export const serveWidgetLoader = async (req, res) => {
       productId,
     );
 
-    return res.send(buildLoaderScript(config));
+    return res.send(buildLoaderScript({
+      ...config,
+      clientId,
+      productId,
+    }));
   } catch (err) {
     logger.error("serveWidgetLoader error:", err.message);
 
@@ -59,6 +61,7 @@ export const getWidgetSnippet = async (req, res) => {
       clientId,
       productId,
     );
+    console.log("getWidgetSnippet config:", config);
 
     const snippet = `<script src="${process.env.APP_BASE_URL || "http://localhost:8080"}/widget/loader.js?clientId=${clientId}&productId=${productId}" async></script>`;
 
@@ -66,7 +69,9 @@ export const getWidgetSnippet = async (req, res) => {
       success: true,
       snippet,
       widgetKey,
-      config,
+      widgetName: config.widgetName,
+      websiteUrl: config.websiteUrl,
+      config: { ...config, clientId, productId },
       client,
     });
   } catch (err) {
@@ -88,33 +93,24 @@ export const getWidgetSnippet = async (req, res) => {
  * Invalidates the current widget key for this client and issues a new one.
  * The client will need to re-embed the updated snippet.
  */
-export const rotateWidgetKey = async (req, res) => {
-  try {
-    const clientId = Number(req.params.clientId);
-    const productId = Number(req.body.productId);
+export const rotateWidgetKey = asyncHandler(async (req, res) => {
+  const clientId = Number(req.params.clientId);
+  const productId = Number(req.body.productId);
 
-    if (!productId) {
-      return res
-        .status(400)
-        .json({ success: false, message: "productId is required in body" });
-    }
-
-    const { widgetKey } = await WidgetScriptService.rotateWidgetKey(
-      clientId,
-      productId,
-    );
-
-    return res.json({ success: true, widgetKey });
-  } catch (err) {
-    logger.error("rotateWidgetKey error:", err.message);
-    const status = err.message.includes("not found") ? 404 : 400;
-    return res.status(status).json({ success: false, message: err.message });
+  if (!productId) {
+    return res
+      .status(400)
+      .json({ success: false, message: "productId is required in body" });
   }
-};
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Loader script builder
-// ─────────────────────────────────────────────────────────────────────────────
+  const { widgetKey } = await WidgetScriptService.rotateWidgetKey(
+    clientId,
+    productId,
+  );
+
+  return res.json({ success: true, widgetKey });
+});
+
 
 /**
  * Returns the self-executing JS that runs on the customer's website.
@@ -129,6 +125,8 @@ export const rotateWidgetKey = async (req, res) => {
 
 const buildLoaderScript = (config) => {
   const widgetKey = config.widgetKey;
+  const clientId = config.clientId;
+  const productId = config.productId;
   const position = config.position || "bottom-right";
   const isLeft = position === "bottom-left";
   const widgetAppUrl = process.env.WIDGET_APP_URL || "http://localhost:3001";
@@ -145,8 +143,8 @@ const buildLoaderScript = (config) => {
   "position:fixed",
   "right:0px",      
   "bottom:0px",     
-  "width:80px",     
-  "height:80px",    
+  "width:100px",     
+  "height:100px",    
   "border:none",
   "background:transparent",
   "z-index:2147483647",

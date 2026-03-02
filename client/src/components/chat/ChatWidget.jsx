@@ -202,7 +202,8 @@ const ChatWidget = () => {
               handleOpen();
             }
           }}
-        className="w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg hover:shadow-xl transition-shadow flex items-center justify-center relative"
+        className="w-14 h-14   text-primary-foreground rounded-full shadow-lg hover:shadow-xl transition-shadow flex items-center justify-center relative"
+        style={{ backgroundColor: "#1a8fd1" }}
       >
         <AnimatePresence mode="wait">
           {isOpen && !isMinimized ? (
@@ -241,6 +242,6 @@ const ChatWidget = () => {
       </motion.button>
     </div>
   );
-};
+}; 
 
 export default ChatWidget;

@@ -23,6 +23,8 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
       "@components": '/src/components',
       "@slices": '/src/slices',
+      "@hooks": '/src/hooks',
+      "@utils": '/src/utils',
     },
   },
 })

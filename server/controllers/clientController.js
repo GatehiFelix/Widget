@@ -20,6 +20,7 @@ export const syncClientFromCRM = async (req, res) => {
       rag_enabled,
       allowed_origins,
       // Widget fields
+      widget_name,
       widget_primary_color,
       widget_position,
       widget_welcome_message,
@@ -60,6 +61,7 @@ export const syncClientFromCRM = async (req, res) => {
 
     if (existingWidget) {
       await existingWidget.update({
+        widget_name:    widget_name || existingWidget.widget_name,
         primary_color:   widget_primary_color || existingWidget.primary_color,
         position:        widget_position      || existingWidget.position,
         welcome_message: widget_welcome_message || existingWidget.welcome_message,
@@ -97,3 +99,4 @@ export const syncClientFromCRM = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+

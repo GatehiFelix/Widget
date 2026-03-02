@@ -11,7 +11,7 @@ const WidgetConfig = sequelize.define(
       primaryKey: true,
       autoIncrement: true,
       allowNull: false,
-    },
+    }, 
     client_id: {
       type: DataTypes.BIGINT,
       allowNull: false,
@@ -21,11 +21,15 @@ const WidgetConfig = sequelize.define(
       },
       onDelete: "CASCADE",
       comment: "FK → clients.id",
-    },
+    }, 
+    widget_name: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    }, 
     primary_color: {
       type: DataTypes.STRING,
-      defaultValue: "#6366f1",
-    },
+      defaultValue: "#3B82F6",
+    }, 
     position: {
       type: DataTypes.ENUM("bottom-right", "bottom-left"),
       defaultValue: "bottom-right",

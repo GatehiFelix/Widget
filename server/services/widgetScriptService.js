@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import {Client} from "#models/index.js";
+import {Client, WidgetConfig} from "#models/index.js";
 import logger from "#utils/logger.js";
 
 const BASE_URL = process.env.APP_BASE_URL || "http://localhost:8080";
@@ -82,7 +82,7 @@ const initWidgetFromCRM = async (clientId, productId) => {
     );
   }
 
-  const widget = client.widgetConfig;
+  const widget = client.WidgetConfig;
 
   if (!widget) {
     throw new Error(
@@ -110,7 +110,10 @@ const initWidgetFromCRM = async (clientId, productId) => {
     position: widget.position,
     welcomeMessage: widget.welcome_message,
     launcherText: widget.launcher_text,
+    widgetName: widget.widget_name,
+    websiteUrl: client.website_url,
   };
+  // console.log("initWidgetFromCRM config:", config);
 
   return {
     widgetKey,
