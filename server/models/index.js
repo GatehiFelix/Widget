@@ -11,6 +11,7 @@ import ChatRoom from './chatrooms.js';
 import Message from './messages.js';
 import SessionContext from './sessionContext.js';
 import RefreshToken from './refreshTokens.js';
+import ClientDocument from './documents.js';
 
 // Client associations
 Client.hasMany(User, { foreignKey: 'client_id' });
@@ -76,5 +77,6 @@ export {
     SessionContext,
     RefreshToken,
     WidgetConfig,
+    ClientDocument,
     syncModels
 };

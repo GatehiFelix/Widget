@@ -26,18 +26,15 @@ const storage = multer.diskStorage({
 
 // File filter
 const fileFilter = (req, file, cb) => {
-    const allowedTypes = /txt|pdf|doc|docx|md|json|csv/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype) || 
-                     file.mimetype === 'application/octet-stream' ||
-                     file.mimetype === 'text/plain';
+  const allowedExtensions = ['.txt', '.pdf', '.doc', '.docx', '.md', '.json', '.csv'];
+  const ext = path.extname(file.originalname).toLowerCase();
 
-    if (extname && mimetype) {
-        return cb(null, true);
-    } else {
-        logger.warn(`File upload rejected: ${file.originalname}`);
-        cb(new Error('Only document files are allowed (txt, pdf, doc, docx, md, json, csv)'));
-    }
+  if (allowedExtensions.includes(ext)) {
+    return cb(null, true);
+  }
+
+  logger.warn(`File upload rejected: ${file.originalname} (type: ${file.mimetype})`);
+  cb(new Error(`Only document files are allowed (${allowedExtensions.join(', ')})`));
 };
 
 // Configure multer

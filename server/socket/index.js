@@ -198,7 +198,40 @@ export const initializeSocket = (httpServer) => {
     });
   });
 
-  logger.info("Socket.io initialized with chat and agent support");
+  // document Namespace
+const documentsNamespace = io.of("/documents");
+
+  documentsNamespace.on("connection", (socket) => {
+    logger.info(`[Documents] Socket connected: ${socket.id}`);
+
+    // Frontend sends this immediately after upload returns a jobId
+    socket.on("subscribe_job", ({ jobId, clientId }) => {
+      if (!jobId) return;
+
+      // Join the job-specific room
+      socket.join(`job_${jobId}`);
+      logger.info(`[Documents] Socket ${socket.id} subscribed to job_${jobId}`);
+
+      // Also join the tenant room for dashboard-wide broadcasts
+      if (clientId) {
+        socket.join(`tenant_${clientId}`);
+      }
+
+      socket.emit("subscribed", { jobId });
+    });
+
+    socket.on("unsubscribe_job", ({ jobId }) => {
+      socket.leave(`job_${jobId}`);
+      logger.info(`[Documents] Socket ${socket.id} unsubscribed from job_${jobId}`);
+    });
+
+    socket.on("disconnect", (reason) => {
+      logger.info(`[Documents] Socket disconnected: ${socket.id}, reason: ${reason}`);
+    });
+  });
+
+
+  logger.info("Socket.io initialized — namespaces: default, /widget, /documents");
   return io;
 };
 
@@ -298,6 +331,29 @@ export const emitTyping = (roomId, clientId, senderType, isTyping) => {
 export const emitSessionUpdate = (roomId, clientId, update) => {
   emitToRoom(roomId, clientId, "session_update", update);
 };
+
+
+
+
+export const emitJobProgress = (jobId, payload) => {
+  if (!io) return;
+  io.of("/documents").to(`job_${jobId}`).emit("job_progress", {
+    jobId,
+    timestamp: new Date().toISOString(),
+    ...payload,
+  });
+};
+
+export const emitTenantUpdate = (clientId, payload) => {
+  if (!io) return;
+  io.of("/documents").to(`tenant_${clientId}`).emit("tenant_update", {
+    clientId,
+    timestamp: new Date().toISOString(),
+    ...payload,
+  });
+};
+
+
 
 export default {
   initializeSocket,
