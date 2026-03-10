@@ -3,8 +3,14 @@ import {Client, WidgetConfig} from "#models/index.js";
 import logger from "#utils/logger.js";
 
 const BASE_URL = process.env.APP_BASE_URL || "http://localhost:8080";
-const WIDGET_SCRIPT_SECRET =
-  process.env.WIDGET_SCRIPT_SECRET || "change_me_in_production";
+const _envSecret = process.env.WIDGET_SCRIPT_SECRET;
+if (!_envSecret || _envSecret === 'change_me_in_production') {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('WIDGET_SCRIPT_SECRET must be set to a strong secret in production.');
+  }
+  logger.warn('WIDGET_SCRIPT_SECRET is not set — using insecure default. Set this env var before deploying.');
+}
+const WIDGET_SCRIPT_SECRET = _envSecret || 'change_me_in_production';
 
 const toHex = (value) => Buffer.from(String(value)).toString("hex");
 const fromHex = (hex) => Buffer.from(hex, "hex").toString("utf8");

@@ -6,12 +6,13 @@ import {
 } from "#controllers/widgetScriptController.js";
 import { syncClientFromCRM } from "#controllers/clientController.js";
 import { protectCRM } from "#middleware/authMiddleware.js";
+import { generalRateLimiter } from "#middleware/rateLimitMiddleware.js";
 
 const router = Router();
 
 // Called by the CRM-generated embed snippet on the client's website.
 // ?clientId=X&productId=Y are passed by the CRM.
-router.get("/widget/loader.js", serveWidgetLoader);
+router.get("/widget/loader.js", generalRateLimiter, serveWidgetLoader);
 
 // CRM calls this to fetch the embed snippet for a client.
 // GET /api/clients/4/widget/snippet?productId=456

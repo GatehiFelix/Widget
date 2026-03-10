@@ -74,12 +74,13 @@ agentClient
     }
   });
 
-  setTimeout(() => {
-  console.log("AgentClient isReady:", agentClient.isReady);
-  console.log("AgentClient socket connected:", agentClient._socket?.connected);
-  console.log("AgentClient baseUrl:", agentClient.baseUrl);
-  console.log("AgentClient apiKey:", agentClient.apiKey);
-}, 3000);
+  if (process.env.NODE_ENV !== 'production') {
+    setTimeout(() => {
+      logger.debug(`AgentClient isReady: ${agentClient.isReady}`);
+      logger.debug(`AgentClient socket connected: ${agentClient._socket?.connected}`);
+      logger.debug(`AgentClient baseUrl: ${agentClient.baseUrl}`);
+    }, 3000);
+  }
 
 app.use((req, res, next) => {
   req.ragApp = ragApp;
@@ -96,7 +97,11 @@ app.use(widgetScriptRoutes);
 
 app.use((err, req, res, next) => {
   logger.error(err.stack);
-  res.status(500).json({ success: false, error: err.message });
+  const isProd = process.env.NODE_ENV === 'production';
+  res.status(err.status || 500).json({
+    success: false,
+    error: isProd ? 'An unexpected error occurred.' : err.message,
+  });
 });
 
 const startServer = async () => {

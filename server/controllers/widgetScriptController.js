@@ -37,9 +37,10 @@ export const serveWidgetLoader = async (req, res) => {
     logger.error("serveWidgetLoader error:", err.message);
 
     // Return a silent no-op so the client's page doesn't visibly break
-    const safeMsg = err.message.replace(/`/g, "'");
+    // Use JSON.stringify to safely embed the message string — prevents JS injection
+    const safeMsg = JSON.stringify(err.message);
     return res.status(403).send(
-      `console.warn("[Widget] Could not load: ${safeMsg}");`,
+      `console.warn("[Widget] Could not load: " + ${safeMsg});`,
     );
   }
 };
@@ -140,18 +141,18 @@ const buildLoaderScript = (config) => {
   iframe.src = "${widgetAppUrl}/widget?key=" + encodeURIComponent("${widgetKey}") + "&clientId=${clientId}" + "&productId=${productId}";
 
   iframe.style.cssText = [
-  "position:fixed",
-  "right:0px",      
-  "bottom:0px",     
-  "width:100px",     
-  "height:100px",    
-  "border:none",
-  "background:transparent",
-  "z-index:2147483647",
-  "pointer-events:auto",
-  "overflow:visible",
-  "transition:width 0.3s ease, height 0.3s ease",
-].join(";");
+    "position:fixed",
+    "${isLeft ? 'left:24px' : 'right:24px'}",
+    "bottom:24px",
+    "width:96px",           // button 56px + 24px offset + shadow/badge room
+    "height:96px",          // button 56px + 24px offset + shadow/badge room
+    "border:none",
+    "background:transparent",
+    "z-index:2147483647",
+    "pointer-events:auto",
+    "overflow:visible",
+    "transition:width 0.3s ease, height 0.3s ease",
+  ].join(";");
 
   iframe.setAttribute("allowtransparency", "true");
   iframe.setAttribute("allow", "microphone");
@@ -163,15 +164,15 @@ const buildLoaderScript = (config) => {
     if (!e.data || typeof e.data !== "string") return;
 
     if (e.data === "__widget:open") {
-      iframe.style.width = "${isLeft ? '500px' : '500px'}";
-      iframe.style.height = "1000px";
-      iframe.style.bottom = "0px";
-      iframe.style.right = "24px";
+      iframe.style.width = "500px";
+      iframe.style.height = "930px";   // ✅ Use a realistic height, not 950px
+      iframe.style.bottom = "24px";    // ✅ Keep consistent with initial position
+      iframe.style.${isLeft ? 'left' : 'right'} = "24px";
     }
 
     if (e.data === "__widget:close") {
-      iframe.style.width = "70px";
-      iframe.style.height = "70px";
+      iframe.style.width = "96px";
+      iframe.style.height = "96px";
     }
   });
 })();

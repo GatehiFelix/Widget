@@ -8,9 +8,9 @@ let _cacheExpiry = null;
 const CACHE_TTL_MS =5 * 60 *1000;
 
 const getCachedAgents = async () => {
-    if(_agentCache && _cacheExpiry > Date.now() < _cacheExpiry) {
+    if (_agentCache && _cacheExpiry && Date.now() < _cacheExpiry) {
         return _agentCache;
-    } 
+    }
     return null;
 }
 
@@ -29,8 +29,9 @@ const normalizeAgent = (raw) => ({
     id: raw.user_id,
     name: raw.name || raw.full_name || "unknown",
     email: raw.email,
+    status: raw.status || 'offline',
     productId: raw.product_id || raw.productId || null,
-})
+});
 
 
 /**
@@ -54,11 +55,12 @@ export const fetchAgents = async (clientId) => {
 
     const productId = client.product_id;
     
-    let raw
+    let raw;
     try {
         raw = await agentClient.getAgentsForProduct(productId);
+        logger.debug(`[AgentService] Raw CRM response: ${JSON.stringify(raw)}`);
     } catch (error) {
-        console.log("error fetching agents from backend:", error.message);
+        logger.error(`[AgentService] Error fetching agents from backend: ${error.message}`);
         return [];
     }
 
@@ -68,19 +70,22 @@ export const fetchAgents = async (clientId) => {
             ? raw.data
             : [];
 
-    if(!agents.length) {
-        console.log(`[AgentService] No agents returned from backend for product ${productId}`);
+    if (!agents.length) {
+        logger.warn(`[AgentService] No agents returned from backend for product ${productId}`);
         return [];
     }
 
+    // The /widget-agents endpoint is already agent-scoped — trust all returned users
+    logger.debug(`[AgentService] ${agents.length} agent(s) available for product ${productId}`);
+
     const normalized = agents.map(normalizeAgent);
-    setCachedAgents(normalized)
+    setCachedAgents(normalized);
     return normalized;
         
 }
 
 /**
- * pcick an agent from the list, uses round-robin
+ * pick an agent from the list, uses round-robin
  */
 
 export const selectAgent = (agents = []) => {

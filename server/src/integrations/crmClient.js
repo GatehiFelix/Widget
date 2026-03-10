@@ -88,9 +88,7 @@ class AgentBackendClient {
     return this;
   }
 
-  // ─────────────────────────────────────────────
   // SOCKET METHODS (real-time, fire-and-forget)
-  // ─────────────────────────────────────────────
 
   /**
    * Send a chat message to the agent widget namespace
@@ -145,15 +143,15 @@ class AgentBackendClient {
     });
   }
 
-  // ─────────────────────────────────────────────
-  // REST METHODS
-  // ─────────────────────────────────────────────
 
   /**
-   * Fetch available agents for a given product/department
+   * Fetch available agents for a given product/department.
+   * Passes role=agent so the CRM can pre-filter on its side too.
    */
   async getAgentsForProduct(productId) {
-    return this._apiGet(`/api/internal/widget-agents/${productId}`);
+    const url = `/api/internal/widget-agents/${productId}`;
+    logger.info(`[AgentClient] Fetching agents → GET ${this.baseUrl}${url}`);
+    return this._apiGet(url);
   }
 
   /**

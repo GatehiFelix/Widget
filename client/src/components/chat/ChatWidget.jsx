@@ -8,6 +8,7 @@ import ChatNavigation from "@/components/chats/ChatNavigation";
 import ChatHistory from "@components/chats/ChatHistory";
 
 import { useStartSessionMutation } from "@slices/chatApiSlice";
+import useWidgetConfig from "@/hooks/useWidgetConfig";
 
 const ChatWidget = () => {
   const isEmbedded = window.self !== window.top;
@@ -18,7 +19,8 @@ const ChatWidget = () => {
   const [selectedRoomId, setSelectedRoomId] = useState(null);
 
   const [startSession] = useStartSessionMutation();
-  
+  const { clientId } = useWidgetConfig();
+
   // Track if chat is active (messages or history view)
   const isChatActive = currentView === "messages" || currentView === "history";
 
@@ -70,7 +72,6 @@ const ChatWidget = () => {
     // Get tokens from storage or state as needed
     const sessionToken = localStorage.getItem('chat_session');
     const visitorId = localStorage.getItem('chat_visitor_id');
-    const clientId = 4; // Replace with actual logic
 
     try {
       const result = await startSession({

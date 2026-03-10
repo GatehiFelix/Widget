@@ -11,6 +11,9 @@ import Papa from "papaparse";
 
 import { config } from "#config/index.js";
 import logger from "#utils/logger.js";
+import { geminiImageToCaption } from "../core/embeddings/modalities/geminiImageProcessor.js";
+import { geminiAudioToText } from "../core/embeddings/modalities/geminiAudioProcessor.js";
+
 
 
 const processingQueue = new PQueue({
@@ -25,9 +28,7 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024;  // 50MB
 const MAX_TEXT_SIZE = 10 * 1024 * 1024;  // 10MB
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.txt', '.md', '.docx', '.doc', '.html', '.htm', '.csv', '.png', '.jpg', '.jpeg', '.mp3', '.wav'];
-// Gemini processors
-import { geminiImageToCaption } from "../core/embeddings/modalities/geminiImageProcessor.js";
-import { geminiAudioToText } from "../core/embeddings/modalities/geminiAudioProcessor.js";
+
   // Helper: get Gemini API key
   const getGeminiApiKey = () => {
     return process.env.GOOGLE_API_KEY || config.google?.apiKey;

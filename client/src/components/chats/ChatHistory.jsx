@@ -2,6 +2,7 @@ import React from "react";
 import { FadeLoader } from "react-spinners";
 import { LucideSendHorizonal } from "lucide-react";
 import { useGetConversationSummariesQuery } from "@slices/chatApiSlice";
+import useWidgetConfig from "@/hooks/useWidgetConfig";
 
 import { useDispatch, useSelector } from "react-redux";
 import { setSessionToken, setVisitorId, resetAuth } from "@slices/authSlice";
@@ -39,7 +40,7 @@ const ChatHistory = ({ onSelectConversation }) => {
     onSelectConversation(null); 
     }; 
 
-  const clientId = 4; // Replace with actual clientId logic
+  const { clientId } = useWidgetConfig();
   const {
     data: chatHistory,
     isLoading,
