@@ -74,9 +74,7 @@ class AgentBackendClient {
     return this._isReady && this._socket?.connected;
   }
 
-  // ─────────────────────────────────────────────
   // HANDLER REGISTRATION (inbound events)
-  // ─────────────────────────────────────────────
 
   on(event, handler) {
     this._messageHandlers.set(event, handler);

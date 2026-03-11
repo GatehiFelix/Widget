@@ -9,6 +9,7 @@ import crypto from "crypto";
 import { createDocumentService } from "#services/documentService.js";
 import { createEmbeddingService } from "#core/embeddings/embeddingService.js";
 import { createQdrantService } from "#core/vectorstore/qdrantService.js";
+import { ClientDocument } from "#models/index.js";
 import { config } from "#config/index.js";
 import logger from "#utils/logger.js";
 
@@ -425,11 +426,18 @@ export const createIndexingService = (options = {}) => {
         };
 
     await qdrantService.deleteByFilter(collectionName, filter);
-    
+
+    // Sync the DB to match — remove or mark the corresponding records
     if (documentId) {
-      logger.info(` Deleted document ${documentId} for tenant ${tenantId}`);
+      await ClientDocument.destroy({
+        where: { tenant_id: String(tenantId), id: documentId },
+      });
+      logger.info(`Deleted document ${documentId} for tenant ${tenantId} from Qdrant and DB`);
     } else {
-      logger.info(` Deleted all documents for tenant ${tenantId}`);
+      await ClientDocument.destroy({
+        where: { tenant_id: String(tenantId) },
+      });
+      logger.info(`Deleted all documents for tenant ${tenantId} from Qdrant and DB`);
     }
   };
 

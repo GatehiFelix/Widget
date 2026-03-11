@@ -142,10 +142,10 @@ const buildLoaderScript = (config) => {
 
   iframe.style.cssText = [
     "position:fixed",
-    "${isLeft ? 'left:24px' : 'right:24px'}",
-    "bottom:24px",
-    "width:96px",           // button 56px + 24px offset + shadow/badge room
-    "height:96px",          // button 56px + 24px offset + shadow/badge room
+    "${isLeft ? 'left:16px' : 'right:16px'}",
+    "bottom:8px",
+    "width:96px",
+    "height:96px",
     "border:none",
     "background:transparent",
     "z-index:2147483647",
@@ -165,9 +165,9 @@ const buildLoaderScript = (config) => {
 
     if (e.data === "__widget:open") {
       iframe.style.width = "500px";
-      iframe.style.height = "930px";   // ✅ Use a realistic height, not 950px
-      iframe.style.bottom = "24px";    // ✅ Keep consistent with initial position
-      iframe.style.${isLeft ? 'left' : 'right'} = "24px";
+      iframe.style.height = "930px";
+      iframe.style.bottom = "8px";
+      iframe.style.${isLeft ? 'left' : 'right'} = "16px";
     }
 
     if (e.data === "__widget:close") {
