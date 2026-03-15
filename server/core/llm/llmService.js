@@ -44,8 +44,8 @@ export const createLLMService = (options = {}) => {
     geminiModel = genAI.getGenerativeModel({ 
       model: modelName,
       generationConfig: {
-        temperature,
-        maxOutputTokens: options.maxOutputTokens || parseInt(process.env.MAX_OUTPUT_TOKENS || '2048'),
+        temperature: 0.3,
+        maxOutputTokens: 300,
       }
     });
   } else {

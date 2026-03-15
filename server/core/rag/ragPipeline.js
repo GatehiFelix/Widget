@@ -9,16 +9,25 @@ import { config } from "../../config/index.js";
 
 
 const MAX_HISTORY_MESSAGES = 6;   // keep last N turns to cap history tokens
-const MAX_CONTEXT_CHARS   = 4000; // hard cap on retrieved-doc context chars
+const MAX_CONTEXT_CHARS   = 2000; // hard cap on retrieved-doc context chars
 
 
 /**
- * Normalise a tenant ID → Qdrant collection name.
- * Centralised here so every method uses the same logic.
+ * Build candidate collection names for a tenant.
+ * Order matters: prefer tenant-specific collections first, then global fallback.
  */
-const resolveCollection = (tenantId) =>
-  process.env.QDRANT_DEFAULT_COLLECTION ||
-  (tenantId.startsWith("tenant_") ? tenantId : `tenant_${tenantId}`);
+const buildCollectionCandidates = (tenantId) => {
+  const tenant = String(tenantId);
+  const prefixedTenant = tenant.startsWith("tenant_") ? tenant : `tenant_${tenant}`;
+
+  return Array.from(
+    new Set([
+      tenant,
+      prefixedTenant,
+      process.env.QDRANT_DEFAULT_COLLECTION,
+    ].filter(Boolean))
+  );
+};
 
 /**
  * Build the Qdrant payload filter that scopes results to one tenant.
@@ -67,7 +76,6 @@ const buildContext = (docs) => {
   return result;
 };
 
-// ─── Factory ──────────────────────────────────────────────────────────────────
 
 /**
  * Creates a RAG pipeline for retrieval-augmented generation.
@@ -79,11 +87,43 @@ export const createRAGPipeline = async (options = {}) => {
   const llmService       = createLLMService(options.llm);
   const qdrantService    = createQdrantService(options.qdrant);
 
-  const kDocuments = options.kDocuments || config.rag.kDocuments;
+  const kDocuments = options.kDocuments || 3;
 
-  // ── Vector-store cache (keyed by collection name) ──────────────────────────
   // Avoids recreating the vector store on every single request.
   const vectorStoreCache = new Map();
+  const tenantCollectionCache = new Map();
+
+  const resolveCollection = async (tenantId) => {
+    const tenantKey = String(tenantId);
+    if (tenantCollectionCache.has(tenantKey)) {
+      return tenantCollectionCache.get(tenantKey);
+    }
+
+    const candidates = buildCollectionCandidates(tenantKey);
+
+    for (const candidate of candidates) {
+      try {
+        if (await qdrantService.collectionExists(candidate)) {
+          if (candidate !== candidates[0]) {
+            logger.warn(
+              `Resolved collection fallback for tenant ${tenantKey}: ${candidate}`
+            );
+          }
+          tenantCollectionCache.set(tenantKey, candidate);
+          return candidate;
+        }
+      } catch (error) {
+        logger.warn(`Collection existence check failed for ${candidate}: ${error.message}`);
+      }
+    }
+
+    const fallback = candidates[0];
+    logger.warn(
+      `No candidate collection exists for tenant ${tenantKey}. Using fallback: ${fallback}`
+    );
+    tenantCollectionCache.set(tenantKey, fallback);
+    return fallback;
+  };
 
   const getVectorStore = async (collectionName) => {
     if (!vectorStoreCache.has(collectionName)) {
@@ -97,7 +137,6 @@ export const createRAGPipeline = async (options = {}) => {
     return vectorStoreCache.get(collectionName);
   };
 
-  // ── createRetriever ────────────────────────────────────────────────────────
 
   /**
    * Create a LangChain retriever scoped to one tenant.
@@ -105,7 +144,7 @@ export const createRAGPipeline = async (options = {}) => {
    * @param {Object} retrieverOptions
    */
   const createRetriever = async (tenantId, retrieverOptions = {}) => {
-    const collection = resolveCollection(tenantId);
+    const collection = await resolveCollection(tenantId);
     logger.debug(`Creating retriever for collection: ${collection}`);
 
     const vectorStore = await getVectorStore(collection);
@@ -129,9 +168,8 @@ export const createRAGPipeline = async (options = {}) => {
     logger.info(`Query [tenant=${tenantId}]: ${question}`);
     const startTime = Date.now();
 
-    const collection = resolveCollection(tenantId);
+    const collection = await resolveCollection(tenantId);
 
-    // ── 1. Retrieve ──────────────────────────────────────────────────────────
     let docsWithScores = [];
     try {
       const vectorStore = await getVectorStore(collection);
@@ -147,20 +185,17 @@ export const createRAGPipeline = async (options = {}) => {
       logger.warn(`Collection ${collection} not found or search failed: ${error.message}`);
     }
 
-    // ── 2. Deduplicate ───────────────────────────────────────────────────────
     const uniqueDocsWithScores = deduplicateDocs(docsWithScores);
     const retrievedDocs        = uniqueDocsWithScores.map(([doc]) => doc);
 
     logger.debug(`Retrieved ${docsWithScores.length} docs, ${retrievedDocs.length} after dedup`);
 
-    // ── 3. Confidence ────────────────────────────────────────────────────────
     const confidence = uniqueDocsWithScores.length > 0
       ? Math.round(Math.max(...uniqueDocsWithScores.map(([, score]) => score)) * 100)
       : null;
 
     logger.debug(`Confidence: ${confidence}`);
 
-    // ── 4. Build prompt (single pass, no double-injection) ───────────────────
     // formatRAGPrompt receives context entities via options.context.
     // We do NOT additionally prepend knownEntities — that caused duplication.
     const context     = buildContext(retrievedDocs);          // char-capped
@@ -174,7 +209,6 @@ export const createRAGPipeline = async (options = {}) => {
       queryOptions.context || {}  // known entities passed once, here
     );
 
-    // ── 5. Generate ──────────────────────────────────────────────────────────
     if (queryOptions.stream) {
       return (async function* () {
         for await (const chunk of llmService.stream(prompt)) {
@@ -212,7 +246,7 @@ export const createRAGPipeline = async (options = {}) => {
    */
   const semanticSearch = async (tenantId, searchQuery, limit = 5) => {
     logger.info(`Semantic search [tenant=${tenantId}]: ${searchQuery}`);
-    const collection  = resolveCollection(tenantId);
+    const collection  = await resolveCollection(tenantId);
     const vectorStore = await getVectorStore(collection);
 
     return vectorStore.similaritySearchWithScore(
