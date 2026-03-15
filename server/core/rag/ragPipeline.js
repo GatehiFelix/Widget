@@ -32,8 +32,9 @@ const buildCollectionCandidates = (tenantId) => {
 /**
  * Build the Qdrant payload filter that scopes results to one tenant.
  */
+
 const tenantFilter = (tenantId) => ({
-  must: [{ key: "metadata.tenant_id", match: { value: tenantId } }],
+  must: [{ key: "metadata.tenant_id", match: { value: normalizetenantId(tenantId) } }],
 });
 
 /**
@@ -77,6 +78,13 @@ const buildContext = (docs) => {
 };
 
 
+const normalizetenantId = (tenantId) => {
+  const s = String(tenantId);
+  return s.startsWith("tenant_") ? s : `tenant_${s}`;
+}
+
+
+
 /**
  * Creates a RAG pipeline for retrieval-augmented generation.
  * @param {Object} options - Configuration options
@@ -94,36 +102,32 @@ export const createRAGPipeline = async (options = {}) => {
   const tenantCollectionCache = new Map();
 
   const resolveCollection = async (tenantId) => {
-    const tenantKey = String(tenantId);
-    if (tenantCollectionCache.has(tenantKey)) {
-      return tenantCollectionCache.get(tenantKey);
-    }
+  const normalized = normalizetenantId(tenantId);
+  const tenantKey = String(tenantId);
 
-    const candidates = buildCollectionCandidates(tenantKey);
+  if (tenantCollectionCache.has(tenantKey)) return tenantCollectionCache.get(tenantKey);
 
-    for (const candidate of candidates) {
-      try {
-        if (await qdrantService.collectionExists(candidate)) {
-          if (candidate !== candidates[0]) {
-            logger.warn(
-              `Resolved collection fallback for tenant ${tenantKey}: ${candidate}`
-            );
-          }
-          tenantCollectionCache.set(tenantKey, candidate);
-          return candidate;
-        }
-      } catch (error) {
-        logger.warn(`Collection existence check failed for ${candidate}: ${error.message}`);
+  // Check env override first, then normalized name only
+  const candidates = Array.from(new Set([
+    process.env.QDRANT_DEFAULT_COLLECTION,
+    normalized,           // "tenant_4" — where your docs actually live
+  ].filter(Boolean)));
+
+  for (const candidate of candidates) {
+    try {
+      if (await qdrantService.collectionExists(candidate)) {
+        tenantCollectionCache.set(tenantKey, candidate);
+        return candidate;
       }
+    } catch (error) {
+      logger.warn(`Collection check failed for ${candidate}: ${error.message}`);
     }
+  }
 
-    const fallback = candidates[0];
-    logger.warn(
-      `No candidate collection exists for tenant ${tenantKey}. Using fallback: ${fallback}`
-    );
-    tenantCollectionCache.set(tenantKey, fallback);
-    return fallback;
-  };
+  logger.warn(`No collection found for tenant ${tenantKey}, falling back to ${normalized}`);
+  tenantCollectionCache.set(tenantKey, normalized);
+  return normalized;
+};
 
   const getVectorStore = async (collectionName) => {
     if (!vectorStoreCache.has(collectionName)) {
@@ -156,7 +160,6 @@ export const createRAGPipeline = async (options = {}) => {
     });
   };
 
-  // ── query ──────────────────────────────────────────────────────────────────
 
   /**
    * Full RAG query: retrieve → deduplicate → build prompt → generate.
@@ -164,79 +167,75 @@ export const createRAGPipeline = async (options = {}) => {
    * @param {string} question
    * @param {Object} queryOptions
    */
-  const query = async (tenantId, question, queryOptions = {}) => {
-    logger.info(`Query [tenant=${tenantId}]: ${question}`);
-    const startTime = Date.now();
+const query = async (tenantId, question, queryOptions = {}) => {
+  logger.info(`Query [tenant=${tenantId}]: ${question}`);
+  const startTime = Date.now();
 
-    const collection = await resolveCollection(tenantId);
+  // These two can run in parallel — history formatting is CPU,
+  // collection resolution is I/O. No dependency between them.
+  const [collection, chatHistory] = await Promise.all([
+    resolveCollection(tenantId),
+    Promise.resolve(formatHistory(queryOptions.conversationHistory)),
+  ]);
 
-    let docsWithScores = [];
-    try {
-      const vectorStore = await getVectorStore(collection);
-
-      // Pass the tenant filter here — query() was previously missing this,
-      // which allowed cross-tenant document leakage.
-      docsWithScores = await vectorStore.similaritySearchWithScore(
-        question,
-        queryOptions.k || kDocuments,
-        tenantFilter(tenantId)   // ← fix: scope results to this tenant
-      );
-    } catch (error) {
-      logger.warn(`Collection ${collection} not found or search failed: ${error.message}`);
-    }
-
-    const uniqueDocsWithScores = deduplicateDocs(docsWithScores);
-    const retrievedDocs        = uniqueDocsWithScores.map(([doc]) => doc);
-
-    logger.debug(`Retrieved ${docsWithScores.length} docs, ${retrievedDocs.length} after dedup`);
-
-    const confidence = uniqueDocsWithScores.length > 0
-      ? Math.round(Math.max(...uniqueDocsWithScores.map(([, score]) => score)) * 100)
-      : null;
-
-    logger.debug(`Confidence: ${confidence}`);
-
-    // formatRAGPrompt receives context entities via options.context.
-    // We do NOT additionally prepend knownEntities — that caused duplication.
-    const context     = buildContext(retrievedDocs);          // char-capped
-    const chatHistory = formatHistory(queryOptions.conversationHistory); // turn-capped
-
-    const prompt = formatRAGPrompt(
-      context,
+  let docsWithScores = [];
+  try {
+    const vectorStore = await getVectorStore(collection);
+    docsWithScores = await vectorStore.similaritySearchWithScore(
       question,
-      queryOptions.promptType || "support",
-      chatHistory,
-      queryOptions.context || {}  // known entities passed once, here
+      queryOptions.k || kDocuments,
+      tenantFilter(tenantId)
     );
+  } catch (error) {
+    logger.warn(`Collection ${collection} not found or search failed: ${error.message}`);
+  }
 
-    if (queryOptions.stream) {
-      return (async function* () {
-        for await (const chunk of llmService.stream(prompt)) {
-          yield { answer: chunk, context: retrievedDocs };
-        }
-      })();
-    }
+  const uniqueDocsWithScores = deduplicateDocs(docsWithScores);
+  const retrievedDocs = uniqueDocsWithScores.map(([doc]) => doc);
 
-    const llmResult  = await llmService.generate(prompt);
-    const duration   = ((Date.now() - startTime) / 1000).toFixed(2);
-    logger.info(`Query completed in ${duration}s`);
+  const confidence = uniqueDocsWithScores.length > 0
+    ? Math.round(Math.max(...uniqueDocsWithScores.map(([, score]) => score)) * 100)
+    : null;
 
-    return {
-      text:       llmResult.text,
-      answer:     llmResult.text,   // backwards compat
-      sources:    retrievedDocs.map((doc) => ({
-        content:  doc.pageContent,
-        metadata: doc.metadata,
-      })),
-      confidence,
-      intent:     queryOptions.intent || null,
-      usage:      llmResult.usage,
-      context:    retrievedDocs,
-      input:      question,
-    };
+  const context = buildContext(retrievedDocs);
+
+  const prompt = formatRAGPrompt(
+    context,
+    question,
+    queryOptions.promptType || "support",
+    chatHistory,
+    queryOptions.context || {}
+  );
+
+  // Stream by default for perceived speed — caller sees first token fast
+  // even if total generation time is the same
+  if (queryOptions.stream) {
+    return (async function* () {
+      for await (const chunk of llmService.stream(prompt)) {
+        yield { answer: chunk, context: retrievedDocs };
+      }
+    })();
+  }
+
+  const llmResult = await llmService.generate(prompt);
+  const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+  logger.info(`Query completed in ${duration}s`);
+
+  return {
+    text: llmResult.text,
+    answer: llmResult.text,
+    sources: retrievedDocs.map((doc) => ({
+      content: doc.pageContent,
+      metadata: doc.metadata,
+    })),
+    confidence,
+    intent: queryOptions.intent || null,
+    usage: llmResult.usage,
+    context: retrievedDocs,
+    input: question,
   };
+};
 
-  // ── semanticSearch ─────────────────────────────────────────────────────────
 
   /**
    * Raw similarity search scoped to one tenant.
