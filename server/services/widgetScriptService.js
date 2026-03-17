@@ -2,7 +2,7 @@ import crypto from "crypto";
 import {Client, WidgetConfig} from "#models/index.js";
 import logger from "#utils/logger.js";
 
-const BASE_URL = process.env.APP_BASE_URL || "http://localhost:8080";
+const BASE_URL = process.env.APP_BASE_URL || "http://localhost:8443";
 const _envSecret = process.env.WIDGET_SCRIPT_SECRET;
 if (!_envSecret || _envSecret === 'change_me_in_production') {
   if (process.env.NODE_ENV === 'production') {

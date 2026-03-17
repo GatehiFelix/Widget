@@ -54,7 +54,7 @@ const ChatMessages = ({ roomId, onBack }) => {
     if (!session || !session.roomId || !session.clientId) return;
 
     // Use VITE_APP_SOCKET_URL from env
-    const socketUrl = import.meta.env.VITE_APP_SOCKET_URL || "http://localhost:8080";
+    const socketUrl = import.meta.env.VITE_APP_SOCKET_URL || "http://localhost:8443";
     const socket = io(socketUrl, {
       transports: ["websocket"],
       withCredentials: true,

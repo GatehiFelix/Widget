@@ -64,7 +64,7 @@ export const getWidgetSnippet = async (req, res) => {
     );
     console.log("getWidgetSnippet config:", config);
 
-    const snippet = `<script src="${process.env.APP_BASE_URL || "http://localhost:8080"}/widget/loader.js?clientId=${clientId}&productId=${productId}" async></script>`;
+    const snippet = `<script src="${process.env.APP_BASE_URL || "http://localhost:8443"}/widget/loader.js?clientId=${clientId}&productId=${productId}" async></script>`;
 
     return res.json({
       success: true,
